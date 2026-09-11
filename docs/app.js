@@ -558,6 +558,73 @@ form.addEventListener('submit', async (ev) => {
   }
 });
 
+// ---- notify signup ----
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const notifyForm = document.getElementById('notify-form');
+const notifyStatus = document.getElementById('notify-status');
+notifyForm.addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  if (!firestore){
+    notifyStatus.textContent = 'Signups aren’t connected right now — try reloading the page.';
+    notifyStatus.className = 'form-status notify-status err';
+    return;
+  }
+  const fd = new FormData(notifyForm);
+
+  // honeypot — bots that fill every field get a fake success, no write
+  if ((fd.get('website') || '').toString().trim()){
+    notifyForm.reset();
+    notifyStatus.textContent = 'You’re in — watch your inbox.';
+    notifyStatus.className = 'form-status notify-status ok';
+    return;
+  }
+
+  const email = (fd.get('email') || '').toString().trim();
+  if (!EMAIL_RE.test(email) || email.length > 254){
+    notifyStatus.textContent = 'That doesn’t look like a valid email address.';
+    notifyStatus.className = 'form-status notify-status err';
+    return;
+  }
+
+  const submitBtn = document.getElementById('notify-submit');
+  submitBtn.disabled = true;
+  notifyStatus.textContent = 'Signing you up…';
+  notifyStatus.className = 'form-status notify-status';
+  try{
+    // The doc id doubles as this subscriber's unsubscribe token (see
+    // firestore.rules: get-by-id is open, listing the collection is not,
+    // so this only works if you already have the id -- same pattern as a
+    // mailed one-click unsubscribe link).
+    const token = crypto.randomUUID ? crypto.randomUUID() : ('sub-' + Math.random().toString(36).slice(2) + Date.now().toString(36));
+    await setDoc(doc(firestore, 'subscribers', token), { email, subscribedAt: Date.now() });
+    notifyForm.reset();
+    notifyStatus.textContent = 'You’re in — watch your inbox.';
+    notifyStatus.className = 'form-status notify-status ok';
+  } catch(e){
+    console.error('notify signup failed', e);
+    notifyStatus.textContent = 'Couldn’t sign you up — please try again.';
+    notifyStatus.className = 'form-status notify-status err';
+  } finally{
+    submitBtn.disabled = false;
+  }
+});
+
+// A mailed unsubscribe link points back here as #unsubscribe=<token>.
+function checkUnsubscribeHash(){
+  const m = /^#unsubscribe=(.+)$/.exec(location.hash);
+  if (!m) return;
+  const token = decodeURIComponent(m[1]);
+  document.getElementById('notify-signup').hidden = true;
+  document.getElementById('notify-unsubscribed').hidden = false;
+  document.getElementById('notify').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  history.replaceState(null, '', location.pathname + location.search);
+  if (firestore && token){
+    deleteDoc(doc(firestore, 'subscribers', token)).catch(e => console.error('unsubscribe failed', e));
+  }
+}
+checkUnsubscribeHash();
+window.addEventListener('hashchange', checkUnsubscribeHash);
+
 // ---- admin panel ----
 // No visible control for this on purpose -- opened only by visiting the page
 // with #admin in the URL (e.g. bookmark the-monthly-table/#admin). This is

@@ -67,5 +67,25 @@ service cloud.firestore {
         allow delete: if true;
       }
     }
+
+    match /subscribers/{token} {
+      // Email addresses are the one thing in this whole database that must
+      // NOT be openly readable (unlike events, which are meant to be public).
+      // The trick: the document id IS the subscriber's unsubscribe token, a
+      // client-generated UUID (effectively unguessable). `get` (fetch one doc
+      // you already have the id for) stays open because that's exactly how
+      // the mailed one-click unsubscribe link works; `list` -- which would
+      // let anyone dump the entire collection -- is closed. Same shape as
+      // Firestore's own recommended pattern for "secret link" access.
+      allow get: if true;
+      allow list: if false;
+      allow create: if request.resource.data.keys().hasOnly(['email','subscribedAt'])
+        && request.resource.data.email is string
+        && request.resource.data.email.size() <= 254
+        && request.resource.data.email.matches('^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$')
+        && request.resource.data.subscribedAt is number;
+      allow update: if false;
+      allow delete: if true; // unsubscribe-by-token; same non-guessability argument as above
+    }
   }
 }

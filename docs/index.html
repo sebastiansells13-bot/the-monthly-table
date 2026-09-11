@@ -160,6 +160,24 @@
   .stat span{font-size:12px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:0.08em;}
   .hero-art{width:100%; height:auto;}
 
+  /* ---------- notify ---------- */
+  .notify{padding:36px 0; border-bottom:1px solid var(--line);}
+  .notify-card{
+    background:var(--paper); border:1px solid var(--line); border-radius:var(--radius);
+    box-shadow:var(--shadow); padding:26px clamp(20px,4vw,36px);
+    display:flex; align-items:center; justify-content:space-between; gap:28px; flex-wrap:wrap;
+  }
+  .notify-card .copy{flex:1; min-width:240px;}
+  .notify-card h2{font-size:21px;}
+  .notify-card .copy p{color:var(--ink-soft); font-size:14px; margin-top:8px; max-width:46ch;}
+  .notify-form{display:flex; gap:10px; flex-wrap:wrap; align-items:center;}
+  .notify-form input[type="email"]{
+    font-family:"Karla",sans-serif; font-size:14.5px; color:var(--ink);
+    background:var(--paper-tint); border:1px solid var(--line-strong); border-radius:2px;
+    padding:11px 12px; flex:1 1 220px;
+  }
+  .notify-status{display:block; margin-top:8px;}
+
   /* ---------- partnership ---------- */
   .partners{padding:44px 0; border-bottom:1px solid var(--line);}
   .partners .head{max-width:60ch; margin-bottom:24px;}
@@ -333,6 +351,8 @@
   @media (max-width:820px){
     .hero-grid{grid-template-columns:1fr;}
     .hero-art{max-width:340px; margin:0 auto;}
+    .notify-card{flex-direction:column; align-items:stretch;}
+    .notify-form{width:100%;}
     .partner-cards{grid-template-columns:1fr;}
     .host-shell{grid-template-columns:1fr;}
     .field-row{grid-template-columns:1fr;}
@@ -394,6 +414,37 @@
           <line x1="30" y1="25" x2="34" y2="41" stroke="var(--ink)" stroke-width="2.5"/>
         </g>
       </svg>
+    </div>
+  </section>
+
+  <section class="notify" id="notify">
+    <div class="wrap">
+      <div class="notify-card" id="notify-signup">
+        <div class="copy">
+          <p class="eyebrow">Stay in the loop</p>
+          <h2>Get an email for new and upcoming events.</h2>
+          <p>One email when a neighbor posts something new, plus a reminder the day before anything on the board. No spam, unsubscribe anytime.</p>
+        </div>
+        <div>
+          <form id="notify-form" class="notify-form">
+            <label for="notify-email" class="visually-hidden">Email address</label>
+            <input id="notify-email" name="email" type="email" placeholder="you@example.com" required maxlength="254">
+            <div class="visually-hidden" aria-hidden="true">
+              <label for="notify-website">Leave this field blank</label>
+              <input id="notify-website" name="website" type="text" tabindex="-1" autocomplete="off">
+            </div>
+            <button type="submit" class="btn" id="notify-submit">Notify me</button>
+          </form>
+          <span class="form-status notify-status" id="notify-status"></span>
+        </div>
+      </div>
+      <div class="notify-card" id="notify-unsubscribed" hidden>
+        <div class="copy">
+          <p class="eyebrow">Unsubscribed</p>
+          <h2>You won't get any more emails from this board.</h2>
+          <p>Changed your mind? You can sign up again any time with the form on this page.</p>
+        </div>
+      </div>
     </div>
   </section>
 

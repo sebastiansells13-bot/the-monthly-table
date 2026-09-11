@@ -1,0 +1,15 @@
+{
+  "name": "the-monthly-table-functions",
+  "description": "Email notifications for The Monthly Table (new-event announcements + next-day reminders)",
+  "engines": { "node": "20" },
+  "main": "index.js",
+  "scripts": {
+    "deploy": "firebase deploy --only functions"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.6.0",
+    "firebase-functions": "^5.1.1",
+    "@sendgrid/mail": "^8.1.4"
+  },
+  "private": true
+}
