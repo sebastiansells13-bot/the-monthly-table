@@ -28,7 +28,7 @@ const CATS = {
 };
 const CAT_LIST = Object.keys(CATS);
 const MONTHS = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
-const ADMIN_HASH = 'c5d0d54618459ed1fe7bdababa89c95a0b1f25199901447cca8e9e9b37cd495b';
+const ADMIN_HASH = '5f4f6fab154b4e5fe5789d4fd8aebdf94c1f75926e0c7b4335bd05e7f72e2b35';
 const SUBMIT_COOLDOWN_MS = 45000;
 
 function pad(n){ return String(n).padStart(2,'0'); }
