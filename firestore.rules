@@ -50,10 +50,8 @@ service cloud.firestore {
       // The 4-digit edit code / admin passphrase are UI-level friction only (documented
       // in the README, along with why they don't hold up against a motivated reader of
       // this public dataset) -- Firestore rules can't verify "this caller knows the
-      // code" without real auth, so update/delete stay open here just like they were
-      // under the Claude Artifact's db capability. What these rules DO add over that:
-      // real server-side validation on create/update, which the Artifact's db had no
-      // way to express.
+      // code" without real auth, so update/delete stay open here. What these rules DO
+      // add: real server-side validation on create/update.
       allow read: if true;
       allow create: if isValidEvent(request.resource.data);
       allow update: if isValidEvent(request.resource.data);
