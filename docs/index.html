@@ -94,9 +94,9 @@
     position:absolute !important; width:1px; height:1px; padding:0; margin:-1px;
     overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0;
   }
-  /* Standalone page (no Artifact-injected reset here) -- without this,
-     .admin-overlay{display:flex} below would out-cascade the browser's
-     native `hidden` attribute handling and the dialog would never hide. */
+  /* Without this, .admin-overlay{display:flex} below would out-cascade
+     the browser's native `hidden` attribute handling and the dialog
+     would never hide. */
   [hidden]{display:none !important;}
 
   /* ---------- header ---------- */
