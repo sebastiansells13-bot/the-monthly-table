@@ -1,0 +1,39 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isValidEvent(d) {
+      return d.title is string && d.title.size() > 0 && d.title.size() <= 80
+        && d.category in ['Food Distribution','Volunteer Day','Community Meal','Wellness & Care','Supply Drive']
+        && d.date is string && d.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && d.time is string && d.time.size() <= 40
+        && d.location is string && d.location.size() > 0 && d.location.size() <= 100
+        && d.hostName is string && d.hostName.size() > 0 && d.hostName.size() <= 60
+        && d.description is string && d.description.size() > 0 && d.description.size() <= 400
+        && d.volunteersNeeded is number && d.volunteersNeeded >= 0 && d.volunteersNeeded <= 200;
+    }
+
+    match /events/{eventId} {
+      // Open board: anyone can read and post, matching the site's "no login" design.
+      // The 4-digit edit code / admin passphrase are UI-level friction only (documented
+      // in the README) -- Firestore rules can't verify "this caller knows the code"
+      // without real auth, so update/delete stay open here just like they were under
+      // the Claude Artifact's db capability. What these rules DO add over that: real
+      // server-side validation on create/update, which the Artifact's db had no way
+      // to express.
+      allow read: if true;
+      allow create: if isValidEvent(request.resource.data);
+      allow update: if isValidEvent(request.resource.data);
+      allow delete: if true;
+
+      match /rsvps/{rsvpId} {
+        allow read: if true;
+        allow create: if request.resource.data.keys().hasOnly(['at'])
+          && request.resource.data.at is number;
+        allow update: if false;
+        allow delete: if true;
+      }
+    }
+  }
+}
