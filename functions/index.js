@@ -13,11 +13,13 @@
 // a visitor's browser).
 //
 // SETUP NEEDED BEFORE DEPLOYING (see README for the full walkthrough):
-//   1. Set FROM_EMAIL below to the address you verified as a Single Sender
-//      in SendGrid -- recipients will see this as the "from" address.
-//   2. Store your SendGrid API key as a Firebase secret (never as plain
+//   1. Verify a domain you own with Resend (Resend requires this -- unlike
+//      some providers, there's no "verify a single address" option that
+//      skips owning a domain) and set FROM_EMAIL below to an address at
+//      that domain -- recipients will see it as the "from" address.
+//   2. Store your Resend API key as a Firebase secret (never as plain
 //      text in this file or anywhere in the repo):
-//        firebase functions:secrets:set SENDGRID_API_KEY
+//        firebase functions:secrets:set RESEND_API_KEY
 //   3. firebase deploy --only functions
 
 const { initializeApp } = require('firebase-admin/app');
@@ -25,19 +27,17 @@ const { getFirestore } = require('firebase-admin/firestore');
 const { onDocumentCreated } = require('firebase-functions/v2/firestore');
 const { onSchedule } = require('firebase-functions/v2/scheduler');
 const { defineSecret } = require('firebase-functions/params');
-const sgMail = require('@sendgrid/mail');
+const { Resend } = require('resend');
 
 initializeApp();
 const db = getFirestore();
 
-const SENDGRID_API_KEY = defineSecret('SENDGRID_API_KEY');
+const RESEND_API_KEY = defineSecret('RESEND_API_KEY');
 
 const SITE_URL = 'https://sebastiansells13-bot.github.io/the-monthly-table/';
-// TODO: set this to the email address you verified in SendGrid's Single
-// Sender Verification -- it's what recipients see as the sender, not a
-// secret, safe to commit.
-const FROM_EMAIL = 'CHANGE-ME@example.com';
-const FROM_NAME = 'The Monthly Table';
+// TODO: set this to an address at the domain you verified with Resend --
+// it's what recipients see as the sender, not a secret, safe to commit.
+const FROM_EMAIL = 'The Monthly Table <notifications@CHANGE-ME.example>';
 
 function unsubscribeUrl(token) {
   return `${SITE_URL}#unsubscribe=${encodeURIComponent(token)}`;
@@ -62,25 +62,27 @@ async function sendToSubscribers(subject, buildBody) {
   const subscribers = await getSubscribers();
   if (subscribers.length === 0) return;
 
-  sgMail.setApiKey(SENDGRID_API_KEY.value());
+  const resend = new Resend(RESEND_API_KEY.value());
   const messages = subscribers.map((s) => ({
-    to: s.email,
-    from: { email: FROM_EMAIL, name: FROM_NAME },
+    to: [s.email], // one recipient per message -- never bundle multiple
+                    // subscribers into one `to` array, that would expose
+                    // every recipient's address to every other recipient
+    from: FROM_EMAIL,
     subject,
     text: buildBody(s.token, false),
     html: buildBody(s.token, true),
   }));
 
-  // SendGrid's free tier handles this fine as individual sends; batching
-  // just keeps any one API call small and easy to retry if it fails.
-  const BATCH = 50;
+  // Resend's batch endpoint takes up to 100 distinct emails per call.
+  const BATCH = 100;
   for (let i = 0; i < messages.length; i += BATCH) {
-    await sgMail.send(messages.slice(i, i + BATCH));
+    const { error } = await resend.batch.send(messages.slice(i, i + BATCH));
+    if (error) throw new Error(`Resend batch send failed: ${error.message || error}`);
   }
 }
 
 exports.onNewEvent = onDocumentCreated(
-  { document: 'events/{eventId}', secrets: [SENDGRID_API_KEY] },
+  { document: 'events/{eventId}', secrets: [RESEND_API_KEY] },
   async (event) => {
     const e = event.data && event.data.data();
     if (!e || !e.title) return; // defensive -- shouldn't happen given firestore.rules
@@ -113,7 +115,7 @@ exports.dailyReminder = onSchedule(
     // actual Denver-timezone-aware date library instead.
     schedule: 'every day 14:00',
     timeZone: 'America/Denver',
-    secrets: [SENDGRID_API_KEY],
+    secrets: [RESEND_API_KEY],
   },
   async () => {
     const tomorrow = new Date();

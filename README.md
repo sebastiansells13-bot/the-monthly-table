@@ -63,7 +63,7 @@ Signing up writes one of these via the "Get notified" form. Unsubscribing (a lin
 - **Optional event photo.**
 - **Spam deterrence, not prevention.** A hidden honeypot field (`website`) silently no-ops real submissions from simple bots, and a 45-second per-browser cooldown (via `localStorage`) throttles repeat posting. Neither stops a determined actor with dev tools — see security notes below.
 - **Old-listing cleanup.** On load, the page best-effort deletes events more than 60 days past their date (and their `rsvps`). This runs from any visitor's browser, not a server job.
-- **Email notifications** *(GitHub Pages / Firebase version only)*. A "Get notified" box signs a visitor up by email — no login, no confirmation click (no double opt-in yet; see Known limitations). Two Cloud Functions in `functions/` do the actual sending: `onNewEvent` emails everyone when a new event is posted, `dailyReminder` runs once a day and emails a digest of anything happening the next calendar day. Both use SendGrid. Unsubscribing is one click from a link in every email — no page visit or form required, though the link does land back on the site to confirm. See "Email notifications setup" below to actually turn this on.
+- **Email notifications** *(GitHub Pages / Firebase version only)*. A "Get notified" box signs a visitor up by email — no login, no confirmation click (no double opt-in yet; see Known limitations). Two Cloud Functions in `functions/` do the actual sending: `onNewEvent` emails everyone when a new event is posted, `dailyReminder` runs once a day and emails a digest of anything happening the next calendar day. Both use Resend. Unsubscribing is one click from a link in every email — no page visit or form required, though the link does land back on the site to confirm. See "Email notifications setup" below to actually turn this on.
 - **Board admin panel.** No visible link anywhere on purpose — open it by adding `#admin` to the page's URL (e.g. `https://sebastiansells13-bot.github.io/the-monthly-table/#admin`, or the Artifact URL with `#admin` appended) and reloading if it doesn't pop up immediately. That gets you a passphrase-gated panel (same hash-compare pattern as the edit code) listing every event, past included, with a one-click remove — no explanatory text in the popup itself; read this section instead. Closing the panel clears `#admin` from the URL so a plain reload afterward doesn't reopen it. **This is a UI convenience, not real access control** — see below; removing the visible link only cuts down on a casual visitor noticing the feature exists, it does nothing against anyone who reads the page source (the `#admin` trigger and the `admin-overlay` markup are both sitting right there) or opens dev tools. The current passphrase isn't written down here on purpose (this repo is public) — ask Sebastian, or change it yourself: compute a new SHA-256 hex digest (`printf '%s' 'your new phrase' | shasum -a 256`) and swap the `ADMIN_HASH` constant near the top of the `<script>` block (`docs/app.js` for the Pages version, the inline `<script>` in `index.html` for the Artifact version), in **both** files if you want them to match.
 
 ## Security model, honestly
@@ -93,20 +93,21 @@ In short: both versions are fine for a small trusted community sharing a link, a
 
 The signup form and `subscribers` collection work as soon as `firestore.rules` is deployed (see above) — people can sign up right now. Nothing actually gets *sent* until the two Cloud Functions in `functions/` are deployed, which needs a few one-time steps:
 
-1. **Create a free SendGrid account** at [sendgrid.com](https://sendgrid.com) (or swap in another transactional email provider — the code isolates all of the sending logic in `sendToSubscribers()` in `functions/index.js`, so switching providers means rewriting that one function, not the two triggers that call it).
-2. **Verify a Single Sender**: Settings → Sender Authentication → Verify a Single Sender, using any email address you can click a confirmation link from. This avoids needing to own/verify a whole domain — fine for this volume of mail.
-3. **Create an API key**: Settings → API Keys → Create API Key, with at least "Mail Send" permission. Copy it somewhere safe (a password manager) — SendGrid only shows it once.
-4. **Set `FROM_EMAIL`** in `functions/index.js` to the address you verified in step 2 (it's not a secret — it's the address recipients will see as the sender — safe to commit).
-5. **Install the Firebase CLI and log in** (this needs to happen in a real terminal you control, since it opens a Google OAuth consent screen for you to approve):
+1. **Own a domain.** Unlike some providers, Resend requires verifying a domain you own before it'll send to real recipients at all — there's no "verify a single email address" shortcut. If you don't have one yet, buy it yourself from any registrar (that's a purchase only you can make); Cloudflare Registrar and Namecheap are both reasonable, no-nonsense options.
+2. **Create a free Resend account** at [resend.com](https://resend.com) (or swap in another provider — the code isolates all of the sending logic in `sendToSubscribers()` in `functions/index.js`, so switching means rewriting that one function, not the two triggers that call it).
+3. **Add and verify your domain**: Domains → Add Domain, then add the DNS records Resend shows you (SPF/DKIM, typically 2-3 TXT/MX records) at wherever you manage that domain's DNS. Verification is usually automatic within minutes once the records propagate.
+4. **Create an API key**: API Keys → Create API Key, with "Sending access" permission. Copy it somewhere safe (a password manager) — Resend only shows it once.
+5. **Set `FROM_EMAIL`** in `functions/index.js` to an address at your verified domain (e.g. `notifications@yourdomain.com`) — it's not a secret, it's just what recipients see as the sender, safe to commit.
+6. **Install the Firebase CLI and log in** (this needs to happen in a real terminal you control, since it opens a Google OAuth consent screen for you to approve):
    ```bash
    npx firebase-tools login
    ```
-6. **Store the API key as a secret** — never paste it into any file in this repo, this is the one step that has to go directly into Firebase's own secret storage:
+7. **Store the API key as a secret** — never paste it into any file in this repo, this is the one step that has to go directly into Firebase's own secret storage:
    ```bash
-   npx firebase-tools functions:secrets:set SENDGRID_API_KEY
+   npx firebase-tools functions:secrets:set RESEND_API_KEY
    ```
    (it'll prompt you to paste the key; input is hidden)
-7. **Deploy:**
+8. **Deploy:**
    ```bash
    cd functions && npm install && cd ..
    npx firebase-tools deploy --only functions
