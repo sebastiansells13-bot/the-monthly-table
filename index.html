@@ -307,8 +307,7 @@
   .form-status.err{color:var(--chile-ink);}
 
   footer.site{border-top:1px solid var(--line); padding:26px 0 40px;}
-  footer.site .wrap{display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap; font-size:12.5px; color:var(--ink-soft);}
-  .admin-link{background:none; border:none; color:var(--chile-ink); font-size:13px; font-weight:700; text-decoration:underline; text-underline-offset:2px; cursor:pointer; padding:0; font-family:"Karla",sans-serif;}
+  footer.site .wrap{display:flex; align-items:center; gap:16px; flex-wrap:wrap; font-size:12.5px; color:var(--ink-soft);}
 
   /* ---------- admin overlay ---------- */
   .admin-overlay{
@@ -538,7 +537,6 @@
 <footer class="site">
   <div class="wrap">
     <span>The Monthly Table — a community calendar for Las Cruces, NM. Not affiliated with or endorsed by 21st Century Care or Roadrunner Food Bank.</span>
-    <button type="button" class="admin-link" id="admin-open">⚙ Manage this board</button>
   </div>
 </footer>
 
@@ -1092,11 +1090,22 @@
   });
 
   // ---- admin panel ----
+  // No visible control for this on purpose -- opened only by visiting the
+  // artifact with #admin in the URL. Still just UI-level friction, not
+  // access control (see README) -- it only cuts down on a casual viewer
+  // stumbling onto it, nothing more.
   const adminOverlay = document.getElementById('admin-overlay');
-  document.getElementById('admin-open').addEventListener('click', () => { adminOverlay.hidden = false; });
   document.getElementById('admin-close').addEventListener('click', closeAdmin);
   adminOverlay.addEventListener('click', ev => { if (ev.target === adminOverlay) closeAdmin(); });
-  function closeAdmin(){ adminOverlay.hidden = true; }
+  function closeAdmin(){
+    adminOverlay.hidden = true;
+    if (location.hash === '#admin') history.replaceState(null, '', location.pathname + location.search);
+  }
+  function checkAdminHash(){
+    if (location.hash === '#admin') adminOverlay.hidden = false;
+  }
+  checkAdminHash();
+  window.addEventListener('hashchange', checkAdminHash);
 
   document.getElementById('admin-unlock').addEventListener('click', async () => {
     const val = document.getElementById('admin-pass').value;

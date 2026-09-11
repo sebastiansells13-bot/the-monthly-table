@@ -559,11 +559,22 @@ form.addEventListener('submit', async (ev) => {
 });
 
 // ---- admin panel ----
+// No visible control for this on purpose -- opened only by visiting the page
+// with #admin in the URL (e.g. bookmark the-monthly-table/#admin). This is
+// still just UI-level friction, not access control (see README) -- it only
+// cuts down on a casual visitor stumbling onto it, nothing more.
 const adminOverlay = document.getElementById('admin-overlay');
-document.getElementById('admin-open').addEventListener('click', () => { adminOverlay.hidden = false; });
 document.getElementById('admin-close').addEventListener('click', closeAdmin);
 adminOverlay.addEventListener('click', ev => { if (ev.target === adminOverlay) closeAdmin(); });
-function closeAdmin(){ adminOverlay.hidden = true; }
+function closeAdmin(){
+  adminOverlay.hidden = true;
+  if (location.hash === '#admin') history.replaceState(null, '', location.pathname + location.search);
+}
+function checkAdminHash(){
+  if (location.hash === '#admin') adminOverlay.hidden = false;
+}
+checkAdminHash();
+window.addEventListener('hashchange', checkAdminHash);
 
 document.getElementById('admin-unlock').addEventListener('click', async () => {
   const val = document.getElementById('admin-pass').value;
