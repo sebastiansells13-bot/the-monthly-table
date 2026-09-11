@@ -5,12 +5,15 @@ service firebase.storage {
     // Event photos: anyone can read (they're shown publicly on the board);
     // anyone can upload, matching the site's open "no login" hosting model
     // (same tradeoff as firestore.rules -- see that file's comment). Capped
-    // at 8 MiB and restricted to image content types so this can't become
-    // an arbitrary file drop.
+    // at 8 MiB and restricted to a raster-image allowlist -- deliberately
+    // excludes image/svg+xml: SVG can carry embedded <script>, and while the
+    // app only ever renders photoUrl inside an <img> tag (which never
+    // executes it), the raw Storage URL is a plain link a visitor could open
+    // directly, which would run that script in the Storage origin.
     match /event-photos/{fileName} {
       allow read: if true;
       allow write: if request.resource.size < 8 * 1024 * 1024
-        && request.resource.contentType.matches('image/.*');
+        && request.resource.contentType.matches('image/(jpeg|png|gif|webp)');
     }
 
     // Everything else stays closed.

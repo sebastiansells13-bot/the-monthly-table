@@ -308,7 +308,7 @@
 
   footer.site{border-top:1px solid var(--line); padding:26px 0 40px;}
   footer.site .wrap{display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap; font-size:12.5px; color:var(--ink-soft);}
-  .admin-link{background:none; border:none; color:var(--ink-soft); font-size:12px; text-decoration:underline; text-underline-offset:2px; cursor:pointer; padding:0; font-family:"Karla",sans-serif;}
+  .admin-link{background:none; border:none; color:var(--chile-ink); font-size:13px; font-weight:700; text-decoration:underline; text-underline-offset:2px; cursor:pointer; padding:0; font-family:"Karla",sans-serif;}
 
   /* ---------- admin overlay ---------- */
   .admin-overlay{
@@ -538,18 +538,17 @@
 <footer class="site">
   <div class="wrap">
     <span>The Monthly Table — a community calendar for Las Cruces, NM. Not affiliated with or endorsed by 21st Century Care or Roadrunner Food Bank.</span>
-    <button type="button" class="admin-link" id="admin-open">Board admin</button>
+    <button type="button" class="admin-link" id="admin-open">⚙ Manage this board</button>
   </div>
 </footer>
 
 <div class="admin-overlay" id="admin-overlay" hidden>
   <div class="admin-panel">
     <div class="admin-panel-head">
-      <h3>Board admin</h3>
+      <h3>Manage this board</h3>
       <button type="button" class="icon-btn" id="admin-close" aria-label="Close">✕</button>
     </div>
     <div class="admin-gate" id="admin-gate">
-      <p class="form-note">This passphrase only gates this browser's view — it isn't real security (anyone comfortable with dev tools could still write to the board directly). It's here so you don't have to ask Claude to remove a listing for you.</p>
       <div class="field">
         <label for="admin-pass">Passphrase</label>
         <input id="admin-pass" type="password" autocomplete="off">
@@ -802,7 +801,13 @@
     if (upcoming.length === 0){
       grid.innerHTML = `<div class="empty-state">Nothing posted ${activeFilter === 'All' ? 'yet' : 'in “' + escapeHtml(activeFilter) + '” yet'} — be the first to <a href="#host">add one</a>.</div>`;
     } else {
-      grid.innerHTML = upcoming.map(cardHTML).join('');
+      // A malformed document (the Artifact db has no schema validation, so a
+      // stray or malicious write here has no shape guarantee at all) shouldn't
+      // take the whole board down -- render what we can, skip what throws.
+      grid.innerHTML = upcoming.map(e => {
+        try { return cardHTML(e); }
+        catch(err){ console.error('card render failed, skipping', e && e.id, err); return ''; }
+      }).join('');
       upcoming.forEach(e => ensureRsvpLoaded(e.id));
     }
 
