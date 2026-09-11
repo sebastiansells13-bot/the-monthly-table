@@ -1,0 +1,21 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Event photos: anyone can read (they're shown publicly on the board);
+    // anyone can upload, matching the site's open "no login" hosting model
+    // (same tradeoff as firestore.rules -- see that file's comment). Capped
+    // at 8 MiB and restricted to image content types so this can't become
+    // an arbitrary file drop.
+    match /event-photos/{fileName} {
+      allow read: if true;
+      allow write: if request.resource.size < 8 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    // Everything else stays closed.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

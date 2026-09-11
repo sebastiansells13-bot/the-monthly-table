@@ -14,7 +14,7 @@ This repo contains **two separate implementations** of the same design and featu
 | **Hosted by** | Claude Artifacts | GitHub Pages |
 | **Data layer** | The Artifact's built-in `db`/`assets`/`downloads` capabilities (`window.claude.use(...)`) | Firebase (Firestore + Storage), project `the-monthly-table`, via the modular JS SDK loaded from `gstatic.com` |
 | **Sharing** | Private by default — share from the page's own Share menu | Public, no sharing step needed |
-| **Photo upload** | Works | Wired up but silently no-ops — see Firebase project setup below |
+| **Photo upload** | Works | Works (Blaze plan + Storage bucket both provisioned) |
 
 Why two: the Artifact version is the original, quickest to iterate on from inside a Claude conversation. The GitHub Pages version exists so the board can live at a public URL with no claude.ai dependency. If you only need one, the Artifact version is simpler to maintain (no external project to manage); the Pages version is the one to point outside links at.
 
@@ -57,15 +57,16 @@ The board only shows events with `date >= today`; sorting is ascending by `date`
 Both backends implement the same "anyone can host, no login" design, which means:
 
 - **Artifact version:** every viewer of the artifact has the same read/write access to the `events` collection by default (the `db` capability's default rules). The 4-digit edit code and admin passphrase are UI-level friction, not enforced server-side.
-- **GitHub Pages / Firebase version:** `firestore.rules` (in this repo) makes `events` and `events/*/rsvps` readable and writable by anyone — same open model — but adds real **server-side field validation** on create/update (required fields, length caps, an allowed category list, a date-format check) that the Artifact's `db` had no way to express. Still, nothing stops someone with browser dev tools from calling the Firestore SDK directly with the public `firebaseConfig` (which is *meant* to be public — Firebase's security model is the rules, not a hidden key) and editing or deleting any event, bypassing the edit-code/admin-passphrase UI entirely.
+- **GitHub Pages / Firebase version:** `firestore.rules` (in this repo) makes `events` and `events/*/rsvps` readable and writable by anyone — same open model — but adds real **server-side field validation** on create/update (required fields, length caps, an allowed category list, a date-format check) that the Artifact's `db` had no way to express. `storage.rules` does the same for photo uploads: public read, and write capped at 8 MiB restricted to `image/*` content types. Still, nothing stops someone with browser dev tools from calling the Firestore/Storage SDK directly with the public `firebaseConfig` (which is *meant* to be public — Firebase's security model is the rules, not a hidden key) and editing or deleting any event, bypassing the edit-code/admin-passphrase UI entirely.
 
 In short: both versions are fine for a small trusted community sharing a link, and both are vulnerable to a motivated bad actor. Real per-poster write protection would need actual authentication, which the site deliberately doesn't have (no accounts, no login).
 
 ## Firebase project (GitHub Pages version only)
 
-- Project: `the-monthly-table` (Spark/free plan), console: https://console.firebase.google.com/project/the-monthly-table
+- Project: `the-monthly-table` on the **Blaze** (pay-as-you-go) plan, console: https://console.firebase.google.com/project/the-monthly-table
 - Firestore database created in Standard edition, `nam5` (US) location, rules in `firestore.rules` — paste that file's contents into the console's Firestore → Rules tab to update them (or use the Firebase CLI).
-- **Storage (for photo upload) requires upgrading the project to the Blaze (pay-as-you-go) plan** — it needs a billing account on file even though actual usage stays within the free-tier credit for a small site like this. That upgrade needs to happen from the Firebase console by whoever owns the Google account; it's not something that can be scripted or done on someone's behalf. Until then, `docs/index.html` still tries `getStorage()`/`uploadBytes()` and just silently skips the photo (the rest of the submission goes through fine) — no code changes needed once Storage is enabled, it'll start working.
+- Storage bucket `the-monthly-table.firebasestorage.app`, no-cost location (`US-EAST1`), rules in `storage.rules` (same paste-to-update workflow, under Storage → Rules).
+- **Cost:** Blaze doesn't change the free quota — it only lets usage exceed it (and bills for the excess) instead of hard-capping at it. At this site's realistic scale (a small community calendar), expected spend is $0/month; the free tier alone comfortably covers normal traffic by a wide margin. A **budget alert** is configured on the linked billing account (Google Cloud Console → Billing → Budgets & alerts → "Firebase Project the-monthly-table"): emails at $1, $1.80, and $2 of actual spend, sent to both billing admins and project owners. Firebase auto-created this budget at the same default thresholds during the Blaze upgrade — nothing needed to be added.
 - The `firebaseConfig` object in `docs/index.html` (apiKey, projectId, etc.) is not a secret — Firebase's access model relies on security rules, not on hiding that object. Don't add real secrets (service account keys, admin credentials) to this repo.
 
 ## Updating the live pages
