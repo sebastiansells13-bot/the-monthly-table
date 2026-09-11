@@ -1,23 +1,26 @@
 # The Monthly Table
 
-A community-run events calendar for Las Cruces, NM. Neighbors post monthly food distributions, care days, volunteer drives, community meals, and supply drives; anyone who opens the page can add one. Built as a single-page Claude Artifact backed by a live shared database — no backend to deploy or maintain.
+A community-run events calendar for Las Cruces, NM. Neighbors post monthly food distributions, care days, volunteer drives, community meals, and supply drives; anyone who opens the page can add one.
 
 It's an independent, community-maintained board — **not** an official page of, or endorsed by, 21st Century Care or Roadrunner Food Bank. It exists to point neighbors toward the kind of work those organizations do and to give people an easy way to organize grassroots events alongside it. See the "Why this board exists" section on the page itself for the exact wording — don't strengthen the affiliation language without both organizations' sign-off.
 
-## Live page
+## Two independent copies of the same app
 
-- **Artifact URL (the actual working board):** https://claude.ai/code/artifact/961d5793-c566-49f5-ad24-124af6d9528c
-- **GitHub Pages:** https://sebastiansells13-bot.github.io/the-monthly-table/ — a static landing page (`docs/index.html`) that links to the Artifact URL above. It is **not** a copy of the app: the board, RSVPs, hosting form, and admin panel all depend on `window.claude`, a runtime the Claude Artifacts viewer injects — it doesn't exist on GitHub Pages or anywhere outside claude.ai, so `docs/index.html` deliberately stays a simple signpost rather than a broken replica.
+This repo contains **two separate implementations** of the same design and feature set, each wired to a different backend. They share no code and their data does **not** sync with each other — the same event posted on one won't appear on the other.
 
-## How it works
+| | `index.html` (repo root) | `docs/index.html` |
+|---|---|---|
+| **Live at** | https://claude.ai/code/artifact/961d5793-c566-49f5-ad24-124af6d9528c | https://sebastiansells13-bot.github.io/the-monthly-table/ |
+| **Hosted by** | Claude Artifacts | GitHub Pages |
+| **Data layer** | The Artifact's built-in `db`/`assets`/`downloads` capabilities (`window.claude.use(...)`) | Firebase (Firestore + Storage), project `the-monthly-table`, via the modular JS SDK loaded from `gstatic.com` |
+| **Sharing** | Private by default — share from the page's own Share menu | Public, no sharing step needed |
+| **Photo upload** | Works | Wired up but silently no-ops — see Firebase project setup below |
 
-- `index.html` (repo root) is the entire app — one file, no build step. It's the file published to the Artifact URL above; `docs/index.html` is unrelated static content only GitHub Pages serves.
-- Data (submitted events) lives in the artifact's built-in `db` capability, not in this repo. The file has no seed data hardcoded in it; starter/example events were written directly into the live database via the Artifact tool, not the page source.
-- Anyone with the page open can submit the "Host an event" form; it writes straight to the shared `events` collection and appears on every viewer's board immediately (no login, no moderation queue).
+Why two: the Artifact version is the original, quickest to iterate on from inside a Claude conversation. The GitHub Pages version exists so the board can live at a public URL with no claude.ai dependency. If you only need one, the Artifact version is simpler to maintain (no external project to manage); the Pages version is the one to point outside links at.
 
-### `events` collection schema
+## `events` schema (same shape on both backends)
 
-Each document (auto-generated id):
+Each document (auto-generated id), collection `events`:
 
 | field | type | notes |
 |---|---|---|
@@ -32,42 +35,49 @@ Each document (auto-generated id):
 | `description` | string | required, ≤400 chars |
 | `volunteersNeeded` | number | optional, `0` = not shown on the card |
 | `editCodeHash` | string | SHA-256 hex of the 4-digit code the host set at submission — lets them edit/cancel later. Never store the plain code. |
-| `photoAssetId` / `photoUrl` | string | optional, set when a host attaches a photo via the `assets` capability |
+| `photoAssetId` / `photoUrl` | string | optional, set when a host attaches a photo |
 | `createdAt` | number | `Date.now()` epoch ms |
 
-Each event also has an `events/{id}/rsvps/{visitorId}` subcollection — one doc per "I'm in" click, keyed by a random id the page stores in the visitor's `localStorage` (`mt_visitor_id`), so a person's RSVP is idempotent per browser with no login. The count shown on a card is `rsvps.size`, never a counter field (counters aren't safe under the store's last-writer-wins writes).
+Each event also has an `events/{id}/rsvps/{visitorId}` subcollection — one doc per "I'm in" click, keyed by a random id the page stores in the visitor's `localStorage` (`mt_visitor_id`), so a person's RSVP is idempotent per browser with no login. The count shown on a card is the subcollection size, never a counter field (counters aren't safe under last-writer-wins writes, which both backends use).
 
-The board only shows events with `date >= today`; sorting is ascending by `date` then `time` string. Category → accent color mapping lives in the `CATS` object near the top of the `<script>` block in `index.html`.
+The board only shows events with `date >= today`; sorting is ascending by `date` then `time` string. Category → accent color mapping lives in the `CATS` object near the top of each file's `<script>` block.
 
-## Features beyond the basic board
+## Features beyond the basic board (both versions)
 
 - **Host self-service edit/cancel.** Each card has a "Manage" control gated by the 4-digit code the host set at submission (hashed client-side with `crypto.subtle`, compared by hash — the plain code is never stored or transmitted). There's no recovery if a host loses their code; they'd need to repost.
-- **RSVP.** "I'm in" writes a doc to that event's `rsvps` subcollection; the count is the subcollection size, not a counter.
-- **Add to calendar.** A Google Calendar link (works without any capability) and an `.ics` download (via the `downloads` capability) per event. If a host didn't set start/end time, the calendar entry is all-day.
-- **Optional event photo.** Uses the `assets` capability (`assets.upload`). Deleting an event does **not** delete its uploaded photo — orphaned assets accumulate and need occasional manual cleanup via the Artifact tool's `list_assets`/`delete_asset`.
-- **Spam deterrence, not prevention.** A hidden honeypot field (`website`) silently no-ops real submissions from simple bots, and a 45-second per-browser cooldown (via `localStorage`) throttles repeat posting. Neither stops a determined actor — the `db` capability's default rules leave `events` writable by anyone who can open the page (that's what makes "anyone can host" possible), so nothing here is a real security boundary.
-- **Old-listing cleanup.** On load, the page best-effort deletes events more than 60 days past their date (and their `rsvps`) to stay well under the artifact database's 5,000-document cap. This runs from any visitor's browser, not a server job.
-- **Board admin panel.** A "Board admin" link in the footer opens a passphrase-gated panel (same hash-compare pattern as the edit code) listing every event, past included, with a one-click remove. **This is a UI convenience, not real access control** — every viewer already has the same underlying write/delete permission on the `events` collection; the passphrase only saves you from asking Claude to delete something. The current passphrase isn't written down here on purpose (this repo is public) — ask Sebastian, or change it yourself by computing a new SHA-256 hex digest (e.g. `printf '%s' 'your new phrase' | shasum -a 256`) and swapping the `ADMIN_HASH` constant near the top of the `<script>` block in `index.html`.
+- **RSVP.** "I'm in" writes a doc to that event's `rsvps` subcollection.
+- **Add to calendar.** A Google Calendar link and an `.ics` download per event. If a host didn't set start/end time, the calendar entry is all-day.
+- **Optional event photo.**
+- **Spam deterrence, not prevention.** A hidden honeypot field (`website`) silently no-ops real submissions from simple bots, and a 45-second per-browser cooldown (via `localStorage`) throttles repeat posting. Neither stops a determined actor with dev tools — see security notes below.
+- **Old-listing cleanup.** On load, the page best-effort deletes events more than 60 days past their date (and their `rsvps`). This runs from any visitor's browser, not a server job.
+- **Board admin panel.** A "Board admin" link in the footer opens a passphrase-gated panel (same hash-compare pattern as the edit code) listing every event, past included, with a one-click remove. **This is a UI convenience, not real access control** — see below. The current passphrase isn't written down here on purpose (this repo is public) — ask Sebastian, or change it yourself: compute a new SHA-256 hex digest (`printf '%s' 'your new phrase' | shasum -a 256`) and swap the `ADMIN_HASH` constant near the top of the `<script>` block, in **both** files if you want them to match.
 
-## Known limitations
+## Security model, honestly
 
-- No true moderation boundary — see above. Fine for a small trusted community; risky if the link gets wide, anonymous reach.
-- RSVP counts are fetched once per card load, not live-subscribed (the store caps subscriptions at 64 per view) — a count can be briefly stale if someone else RSVPs while you're looking at the same card.
-- No custom domain — this lives at the Artifact URL above. A real domain would mean hosting the page outside Claude Artifacts entirely.
-- Event photos have no editing/removal path after initial submission.
+Both backends implement the same "anyone can host, no login" design, which means:
 
-## Updating the live page
+- **Artifact version:** every viewer of the artifact has the same read/write access to the `events` collection by default (the `db` capability's default rules). The 4-digit edit code and admin passphrase are UI-level friction, not enforced server-side.
+- **GitHub Pages / Firebase version:** `firestore.rules` (in this repo) makes `events` and `events/*/rsvps` readable and writable by anyone — same open model — but adds real **server-side field validation** on create/update (required fields, length caps, an allowed category list, a date-format check) that the Artifact's `db` had no way to express. Still, nothing stops someone with browser dev tools from calling the Firestore SDK directly with the public `firebaseConfig` (which is *meant* to be public — Firebase's security model is the rules, not a hidden key) and editing or deleting any event, bypassing the edit-code/admin-passphrase UI entirely.
 
-This repo is the source of truth for the page's code; the Artifact is the deployed copy.
+In short: both versions are fine for a small trusted community sharing a link, and both are vulnerable to a motivated bad actor. Real per-poster write protection would need actual authentication, which the site deliberately doesn't have (no accounts, no login).
 
-1. Edit `index.html` here.
-2. Republish it to the **same** artifact URL above (pass `url` when publishing) so the link doesn't change and existing data isn't affected.
-3. Commit the change in this repo.
+## Firebase project (GitHub Pages version only)
 
-Database writes (seeding, corrections, moderation) go through the Artifact tool's `read_db`/`write_db` actions against the URL above — they don't touch this repo.
+- Project: `the-monthly-table` (Spark/free plan), console: https://console.firebase.google.com/project/the-monthly-table
+- Firestore database created in Standard edition, `nam5` (US) location, rules in `firestore.rules` — paste that file's contents into the console's Firestore → Rules tab to update them (or use the Firebase CLI).
+- **Storage (for photo upload) requires upgrading the project to the Blaze (pay-as-you-go) plan** — it needs a billing account on file even though actual usage stays within the free-tier credit for a small site like this. That upgrade needs to happen from the Firebase console by whoever owns the Google account; it's not something that can be scripted or done on someone's behalf. Until then, `docs/index.html` still tries `getStorage()`/`uploadBytes()` and just silently skips the photo (the rest of the submission goes through fine) — no code changes needed once Storage is enabled, it'll start working.
+- The `firebaseConfig` object in `docs/index.html` (apiKey, projectId, etc.) is not a secret — Firebase's access model relies on security rules, not on hiding that object. Don't add real secrets (service account keys, admin credentials) to this repo.
+
+## Updating the live pages
+
+Each file is the source of truth for its own deployment:
+
+- **Artifact version:** edit `index.html`, republish it to the same artifact URL above (pass that URL so it updates in place rather than creating a new artifact). Database writes/seeding/moderation for it go through the Artifact tool's `read_db`/`write_db` actions, not this repo.
+- **GitHub Pages version:** edit `docs/index.html` and push to `master` — Pages rebuilds automatically from `/docs`. Firestore data changes go through the Firebase console, the Firebase CLI, or a script using the Firebase client SDK (`npm install firebase`) — never hand-edit `firestore.rules` deployment without also pasting the update into the console's Rules tab (this repo's copy isn't auto-deployed).
 
 ## Design notes
 
 - Palette: dried-chile red, desert sage, and turquoise accents on warm adobe/sand neutrals — a Mesilla Valley/high-desert theme rather than a generic charity look.
 - Type: Bricolage Grotesque (headlines) + Karla (body/UI), loaded from Google Fonts.
 - Both light and dark themes are defined via CSS custom properties in `:root`.
+- `docs/index.html` includes `[hidden]{display:none!important}` explicitly — outside the Claude Artifact wrapper (which injects that rule automatically), a class-based `display` rule at equal CSS specificity to `[hidden]` will beat the browser's native hidden-attribute handling and the element never actually hides. `index.html` doesn't need this since the Artifact platform adds it for you.
