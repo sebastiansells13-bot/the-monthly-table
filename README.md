@@ -6,12 +6,12 @@ It's an independent, community-maintained board — **not** an official page of,
 
 ## Live page
 
-- **Artifact URL:** https://claude.ai/code/artifact/961d5793-c566-49f5-ad24-124af6d9528c
-- Private by default (owner-only) until shared from the page's own Share menu.
+- **Artifact URL (the actual working board):** https://claude.ai/code/artifact/961d5793-c566-49f5-ad24-124af6d9528c
+- **GitHub Pages:** https://sebastiansells13-bot.github.io/the-monthly-table/ — a static landing page (`docs/index.html`) that links to the Artifact URL above. It is **not** a copy of the app: the board, RSVPs, hosting form, and admin panel all depend on `window.claude`, a runtime the Claude Artifacts viewer injects — it doesn't exist on GitHub Pages or anywhere outside claude.ai, so `docs/index.html` deliberately stays a simple signpost rather than a broken replica.
 
 ## How it works
 
-- `index.html` is the entire site — one file, no build step.
+- `index.html` (repo root) is the entire app — one file, no build step. It's the file published to the Artifact URL above; `docs/index.html` is unrelated static content only GitHub Pages serves.
 - Data (submitted events) lives in the artifact's built-in `db` capability, not in this repo. The file has no seed data hardcoded in it; starter/example events were written directly into the live database via the Artifact tool, not the page source.
 - Anyone with the page open can submit the "Host an event" form; it writes straight to the shared `events` collection and appears on every viewer's board immediately (no login, no moderation queue).
 

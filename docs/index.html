@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Monthly Table</title>
+<meta name="description" content="A community-run events calendar for Las Cruces, NM — the source code lives here; the live board runs on Claude Artifacts.">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=Karla:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap">
+<style>
+  :root{
+    --sand:#F2ECDE;
+    --paper:#FBF7EC;
+    --paper-tint:#F6EFDE;
+    --ink:#2A2318;
+    --ink-soft:#6B6152;
+    --line:rgba(42,35,24,0.16);
+    --line-strong:rgba(42,35,24,0.28);
+    --chile:#B8482E;
+    --chile-ink:#7A2F1D;
+    --sage:#5B6B4C;
+    --turquoise:#2F6E76;
+    --gold:#96742A;
+    --shadow:0 1px 0 rgba(42,35,24,0.05), 0 10px 24px -16px rgba(42,35,24,0.35);
+    color-scheme:light;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --sand:#1B1611;
+      --paper:#241D15;
+      --paper-tint:#2A2118;
+      --ink:#EFE7D8;
+      --ink-soft:#B7AB96;
+      --line:rgba(239,231,216,0.16);
+      --line-strong:rgba(239,231,216,0.28);
+      --chile:#E0805A;
+      --chile-ink:#F3C3AC;
+      --sage:#A5BC8E;
+      --turquoise:#7FC2C2;
+      --gold:#D8B564;
+      --shadow:0 1px 0 rgba(0,0,0,0.2), 0 14px 30px -18px rgba(0,0,0,0.65);
+      color-scheme:dark;
+    }
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--sand); color:var(--ink);
+    font-family:"Karla",system-ui,-apple-system,sans-serif;
+    font-size:16px; line-height:1.6;
+    display:flex; flex-direction:column; min-height:100vh;
+  }
+  h1,h2{
+    font-family:"Bricolage Grotesque","Karla",system-ui,sans-serif;
+    font-weight:800; text-wrap:balance; margin:0; letter-spacing:-0.01em;
+  }
+  a{color:inherit;}
+  main{flex:1; display:flex; align-items:center;}
+  .wrap{max-width:640px; margin:0 auto; padding:64px 28px;}
+  .eyebrow{
+    font-size:12px; font-weight:700; letter-spacing:0.11em; text-transform:uppercase;
+    color:var(--ink-soft);
+  }
+  .wordmark{display:flex; align-items:center; gap:10px; margin-bottom:22px;}
+  .wordmark svg{width:28px; height:28px; flex:none;}
+  h1{font-size:clamp(30px,5vw,44px); line-height:1.08; margin-top:10px;}
+  p.lede{margin-top:16px; font-size:17px; color:var(--ink-soft); max-width:52ch;}
+  .cta-row{display:flex; gap:12px; margin-top:30px; flex-wrap:wrap;}
+  .btn{
+    display:inline-flex; align-items:center; gap:8px;
+    font-weight:700; font-size:15px; padding:13px 22px; border-radius:3px;
+    border:1px solid var(--ink); background:var(--ink); color:var(--sand);
+    text-decoration:none; transition:transform .12s ease;
+  }
+  .btn:hover{transform:translateY(-1px);}
+  .btn.ghost{background:transparent; color:var(--ink); border-color:var(--line-strong);}
+  .card{
+    margin-top:36px; background:var(--paper); border:1px solid var(--line); border-radius:3px;
+    box-shadow:var(--shadow); padding:20px 22px; font-size:14px; color:var(--ink-soft);
+  }
+  .card strong{color:var(--ink);}
+  footer{
+    border-top:1px solid var(--line); padding:22px 28px; font-size:12.5px; color:var(--ink-soft);
+    display:flex; justify-content:space-between; gap:16px; flex-wrap:wrap; max-width:640px; margin:0 auto; width:100%;
+  }
+  footer a{text-decoration:underline; text-underline-offset:2px;}
+</style>
+</head>
+<body>
+  <main>
+    <div class="wrap">
+      <div class="wordmark">
+        <svg viewBox="0 0 30 30" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <circle cx="15" cy="15" r="14" fill="none" stroke="var(--chile)" stroke-width="1.4"/>
+          <path d="M8 19 L13 10 L15 14 L17 9 L22 19 Z" fill="var(--chile)"/>
+        </svg>
+        <span class="eyebrow">Las Cruces, New Mexico</span>
+      </div>
+      <h1>The Monthly Table</h1>
+      <p class="lede">A community-run calendar where neighbors host monthly food distributions, care days, and volunteer drives — related in spirit to the work of 21st Century Care and Roadrunner Food Bank around the Mesilla Valley.</p>
+      <div class="cta-row">
+        <a class="btn" href="https://claude.ai/code/artifact/961d5793-c566-49f5-ad24-124af6d9528c">Open the live board →</a>
+        <a class="btn ghost" href="https://github.com/sebastiansells13-bot/the-monthly-table">View source on GitHub</a>
+      </div>
+      <div class="card">
+        <strong>Why this page is separate from the board:</strong> this repository holds the site's source code, but the board itself — posting events, RSVPs, the shared calendar — runs on a live database that only works inside the Claude Artifacts viewer. GitHub Pages can host static files, not that runtime, so this page is a signpost rather than a copy of the app.
+      </div>
+    </div>
+  </main>
+  <footer>
+    <span>Independently run — not an official page of, or endorsed by, 21st Century Care or Roadrunner Food Bank.</span>
+    <a href="https://github.com/sebastiansells13-bot/the-monthly-table">github.com/sebastiansells13-bot/the-monthly-table</a>
+  </footer>
+</body>
+</html>
