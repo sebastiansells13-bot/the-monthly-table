@@ -5,6 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>The Monthly Table</title>
 <meta name="description" content="A community-run calendar where Las Cruces neighbors host monthly food, care, and volunteer events.">
+<meta name="theme-color" content="#F2ECDE" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1B1611" media="(prefers-color-scheme: dark)">
+<meta property="og:type" content="website">
+<meta property="og:title" content="The Monthly Table">
+<meta property="og:description" content="A community-run calendar where Las Cruces neighbors host monthly food, care, and volunteer events.">
+<meta property="og:url" content="https://sebastiansells13-bot.github.io/the-monthly-table/">
+<meta property="og:image" content="https://sebastiansells13-bot.github.io/the-monthly-table/apple-touch-icon.png">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -65,6 +72,7 @@
   }
 
   *{box-sizing:border-box;}
+  html{scroll-behavior:smooth; scroll-padding-top:84px;}
   body{
     margin:0;
     background:var(--sand);
@@ -113,6 +121,7 @@
     display:flex; align-items:center; gap:10px;
     font-family:"Bricolage Grotesque",sans-serif;
     font-weight:800; font-size:19px; letter-spacing:-0.01em;
+    text-decoration:none; white-space:nowrap;
   }
   .wordmark .mark{
     width:30px;height:30px;flex:none;
@@ -129,6 +138,7 @@
     transition:transform .12s ease, box-shadow .12s ease;
   }
   .btn:hover{transform:translateY(-1px);}
+  .btn.ghost:hover, .btn.subtle:hover{border-color:var(--ink);}
   .btn:disabled{opacity:0.6; cursor:default; transform:none;}
   .btn:focus-visible, a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible{
     outline:2px solid var(--turquoise); outline-offset:2px;
@@ -138,6 +148,7 @@
   }
   .btn.subtle{background:transparent; color:var(--ink-soft); border-color:var(--line-strong); font-weight:600;}
   .btn.danger{background:var(--chile); border-color:var(--chile); color:#fff;}
+  @media (prefers-color-scheme: dark){ .btn.danger{color:#1B1611;} }
 
   /* ---------- hero ---------- */
   .hero{padding:56px 0 44px; border-bottom:1px solid var(--line);}
@@ -154,13 +165,13 @@
   }
   .hero .ctas{display:flex; gap:12px; margin-top:26px; flex-wrap:wrap;}
   .stat-row{
-    display:flex; gap:28px; margin-top:34px; flex-wrap:wrap;
+    display:grid; grid-template-columns:repeat(3, auto); justify-content:start; gap:12px 32px; margin-top:34px;
   }
   .stat b{
     display:block; font-family:"Bricolage Grotesque",sans-serif; font-size:28px;
     font-weight:800; font-variant-numeric:tabular-nums;
   }
-  .stat span{font-size:12px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:0.08em;}
+  .stat span{font-size:12px; display:block; color:var(--ink-soft); text-transform:uppercase; letter-spacing:0.08em;}
   .hero-art{width:100%; height:auto;}
 
   /* ---------- notify ---------- */
@@ -213,6 +224,7 @@
     border:1px solid var(--line-strong); background:transparent; color:var(--ink-soft);
     cursor:pointer;
   }
+  .chip:hover{color:var(--ink); border-color:var(--ink);}
   .chip[aria-pressed="true"]{background:var(--ink); color:var(--sand); border-color:var(--ink);}
 
   .event-grid{
@@ -228,10 +240,6 @@
     box-shadow:var(--shadow);
     padding:20px 20px 18px;
     display:flex; flex-direction:column; gap:10px;
-  }
-  .card::before{
-    content:""; position:absolute; top:10px; right:16px; width:6px; height:6px;
-    border-radius:50%; background:var(--line-strong);
   }
   .card-photo{width:100%; aspect-ratio:16/9; object-fit:cover; border-radius:2px; display:block; border:1px solid var(--line);}
   .card .top-row{display:flex; align-items:flex-start; gap:14px;}
@@ -264,6 +272,7 @@
     font-size:12px; font-weight:700; padding:5px 11px; border-radius:99px;
     border:1px solid var(--line-strong); background:transparent; color:var(--ink); cursor:pointer;
   }
+  .rsvp-btn:hover{border-color:var(--ink);}
   .rsvp-btn.in{background:var(--sage-soft); border-color:var(--sage); color:var(--sage);}
   .rsvp-count{color:var(--ink-soft);}
   .cal-links{display:flex; gap:10px; margin-left:auto;}
@@ -277,9 +286,9 @@
     display:flex; flex-direction:column; gap:10px;
     border-top:1px dashed var(--line-strong); padding-top:12px;
   }
-  .manage-panel .row{display:flex; gap:8px;}
-  .manage-panel .row .field{flex:1;}
-  .manage-panel .code-input{
+  .manage-panel .row{display:flex; gap:8px; flex-wrap:wrap;}
+  .manage-panel .row .field{flex:1 1 120px; min-width:0;}
+  .code-input, .manage-panel .code-input{
     max-width:130px; font-family:"Karla",sans-serif; font-size:14px; letter-spacing:0.15em;
     background:var(--paper-tint); border:1px solid var(--line-strong); border-radius:2px; padding:8px 10px; color:var(--ink);
   }
@@ -315,6 +324,7 @@
     padding:10px 11px;
   }
   .field textarea{resize:vertical; min-height:76px;}
+  .field input.code-input{max-width:130px; letter-spacing:0.15em;}
   .field input::placeholder, .field textarea::placeholder{color:var(--ink-soft); opacity:0.7;}
   .field input[type="file"]{padding:7px 8px; font-size:13px;}
   .field-hint{font-size:12px; color:var(--ink-soft); font-weight:400; text-transform:none; letter-spacing:0;}
@@ -325,7 +335,8 @@
   .form-status.err{color:var(--chile-ink);}
 
   footer.site{border-top:1px solid var(--line); padding:26px 0 40px;}
-  footer.site .wrap{display:flex; align-items:center; gap:16px; flex-wrap:wrap; font-size:12.5px; color:var(--ink-soft);}
+  footer.site .wrap{display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; font-size:12.5px; color:var(--ink-soft);}
+  footer.site a{color:var(--ink-soft);}
 
   /* ---------- admin overlay ---------- */
   .admin-overlay{
@@ -361,19 +372,34 @@
     .field-row{grid-template-columns:1fr;}
     nav.links{display:none;}
   }
+  @media (max-width:560px){
+    .wrap{padding:0 18px;}
+    .nav-row{padding:12px 18px;}
+    .wordmark{font-size:17px;}
+    .nav-row .btn{padding:9px 13px; font-size:13px;}
+    .hero{padding:40px 0 36px;}
+    .stat-row{gap:10px 20px;}
+    .stat b{font-size:24px;}
+    .stat span{font-size:11px;}
+  }
+  @media (prefers-reduced-motion: reduce){
+    html{scroll-behavior:auto;}
+    .btn{transition:none;}
+    .btn:hover{transform:none;}
+  }
 </style>
 </head>
-<body>
+<body id="top">
 
 <header class="site">
   <div class="nav-row">
-    <div class="wordmark">
+    <a class="wordmark" href="#top" aria-label="The Monthly Table — back to top">
       <svg class="mark" viewBox="0 0 30 30" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
         <circle cx="15" cy="15" r="14" fill="none" stroke="var(--chile)" stroke-width="1.4"/>
         <path d="M8 19 L13 10 L15 14 L17 9 L22 19 Z" fill="var(--chile)"/>
       </svg>
       The Monthly Table
-    </div>
+    </a>
     <nav class="links">
       <a href="#board">Events</a>
       <a href="#host">Host</a>
@@ -396,7 +422,7 @@
           <a class="btn ghost" href="#board">See what's coming up</a>
         </div>
         <div class="stat-row" id="stat-row">
-          <div class="stat"><b id="stat-month">—</b><span>Events this month</span></div>
+          <div class="stat"><b id="stat-upcoming">—</b><span>Upcoming events</span></div>
           <div class="stat"><b id="stat-hosts">—</b><span>Neighbors hosting</span></div>
           <div class="stat"><b id="stat-next">—</b><span>Next one up</span></div>
         </div>
@@ -431,14 +457,14 @@
         <div>
           <form id="notify-form" class="notify-form">
             <label for="notify-email" class="visually-hidden">Email address</label>
-            <input id="notify-email" name="email" type="email" placeholder="you@example.com" required maxlength="254">
+            <input id="notify-email" name="email" type="email" placeholder="you@example.com" required maxlength="254" autocomplete="email">
             <div class="visually-hidden" aria-hidden="true">
               <label for="notify-website">Leave this field blank</label>
               <input id="notify-website" name="website" type="text" tabindex="-1" autocomplete="off">
             </div>
             <button type="submit" class="btn" id="notify-submit">Notify me</button>
           </form>
-          <span class="form-status notify-status" id="notify-status"></span>
+          <span class="form-status notify-status" id="notify-status" role="status"></span>
         </div>
       </div>
       <div class="notify-card" id="notify-unsubscribed" hidden>
@@ -476,12 +502,12 @@
     <div class="wrap">
       <div class="head">
         <div>
-          <h2>This month's board</h2>
+          <h2>What's coming up</h2>
           <p>Sorted by date, soonest first. RSVP, add one to your calendar, or manage a listing you've already posted.</p>
         </div>
         <div class="chips" id="chips"></div>
       </div>
-      <div class="event-grid" id="event-grid">
+      <div class="event-grid" id="event-grid" aria-live="polite" aria-busy="true">
         <div class="empty-state">Loading the board…</div>
       </div>
     </div>
@@ -569,8 +595,8 @@
           </div>
           <div class="field">
             <label for="f-code">4-digit edit code</label>
-            <input id="f-code" name="editCode" type="text" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" placeholder="1234" required style="max-width:130px; letter-spacing:0.15em;">
-            <span class="field-hint">Only you'll know this — use it later to edit or cancel the listing. There's no reset if you lose it.</span>
+            <input id="f-code" name="editCode" type="text" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" aria-describedby="f-code-hint" placeholder="1234" required class="code-input" autocomplete="off">
+            <span class="field-hint" id="f-code-hint">Only you'll know this — use it later to edit or cancel the listing. There's no reset if you lose it.</span>
           </div>
           <div class="visually-hidden" aria-hidden="true">
             <label for="f-website">Leave this field blank</label>
@@ -578,7 +604,7 @@
           </div>
           <div class="form-actions">
             <button type="submit" class="btn" id="submit-btn">Add to the board</button>
-            <span class="form-status" id="form-status"></span>
+            <span class="form-status" id="form-status" role="status"></span>
           </div>
           <p class="form-note">Posted events are visible to everyone who opens this page — please don't include anything private.</p>
         </form>
@@ -590,23 +616,24 @@
 <footer class="site">
   <div class="wrap">
     <span>The Monthly Table — a community calendar for Las Cruces, NM. Not affiliated with or endorsed by 21st Century Care or Roadrunner Food Bank.</span>
+    <a href="#top">Back to top ↑</a>
   </div>
 </footer>
 
 <div class="admin-overlay" id="admin-overlay" hidden>
-  <div class="admin-panel">
+  <div class="admin-panel" role="dialog" aria-modal="true" aria-labelledby="admin-title">
     <div class="admin-panel-head">
-      <h3>Manage this board</h3>
+      <h3 id="admin-title">Manage this board</h3>
       <button type="button" class="icon-btn" id="admin-close" aria-label="Close">✕</button>
     </div>
-    <div class="admin-gate" id="admin-gate">
+    <form class="admin-gate" id="admin-gate">
       <div class="field">
         <label for="admin-pass">Passphrase</label>
         <input id="admin-pass" type="password" autocomplete="off">
       </div>
-      <button type="button" class="btn" id="admin-unlock">Unlock</button>
-      <p class="form-status err" id="admin-error"></p>
-    </div>
+      <button type="submit" class="btn" id="admin-unlock">Unlock</button>
+      <p class="form-status err" id="admin-error" role="alert"></p>
+    </form>
     <div id="admin-list" hidden></div>
   </div>
 </div>
