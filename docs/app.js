@@ -155,6 +155,10 @@ let storageService = null;
 let adminUnlocked = false;
 
 function vol0(e){ return Number(e.volunteersNeeded) || 0; }
+// "9:00" vs "10:00" don't sort as strings, so prefer the HH:MM start time
+// when a host set one and fall back to the free-text time otherwise.
+function sortKey(e){ return (e.date || '') + ' ' + (e.startTime || e.time || ''); }
+function labelFor(e){ return MONTHS[parseISO(e.date).getMonth()] + ' ' + parseISO(e.date).getDate(); }
 
 function editPanelHTML(e, ui){
   const id = e.id;
@@ -171,23 +175,23 @@ function editPanelHTML(e, ui){
   const catOptions = CAT_LIST.map(c => `<option value="${escapeHtml(c)}" ${c===e.category?'selected':''}>${escapeHtml(c)}</option>`).join('');
   return `
     <div class="manage-panel">
-      <div class="field"><label>Event name</label><input type="text" id="edit-title-${id}" value="${escapeHtml(e.title)}" maxlength="80"></div>
+      <div class="field"><label for="edit-title-${id}">Event name</label><input type="text" id="edit-title-${id}" value="${escapeHtml(e.title)}" maxlength="80"></div>
       <div class="row">
-        <div class="field"><label>Category</label><select id="edit-category-${id}">${catOptions}</select></div>
-        <div class="field"><label>Date</label><input type="date" id="edit-date-${id}" value="${escapeHtml(e.date)}"></div>
+        <div class="field"><label for="edit-category-${id}">Category</label><select id="edit-category-${id}">${catOptions}</select></div>
+        <div class="field"><label for="edit-date-${id}">Date</label><input type="date" id="edit-date-${id}" value="${escapeHtml(e.date)}"></div>
       </div>
-      <div class="field"><label>Time</label><input type="text" id="edit-time-${id}" value="${escapeHtml(e.time)}" maxlength="40"></div>
+      <div class="field"><label for="edit-time-${id}">Time</label><input type="text" id="edit-time-${id}" value="${escapeHtml(e.time)}" maxlength="40"></div>
       <div class="row">
-        <div class="field"><label>Start (optional)</label><input type="time" id="edit-start-${id}" value="${escapeHtml(e.startTime||'')}"></div>
-        <div class="field"><label>End (optional)</label><input type="time" id="edit-end-${id}" value="${escapeHtml(e.endTime||'')}"></div>
+        <div class="field"><label for="edit-start-${id}">Start (optional)</label><input type="time" id="edit-start-${id}" value="${escapeHtml(e.startTime||'')}"></div>
+        <div class="field"><label for="edit-end-${id}">End (optional)</label><input type="time" id="edit-end-${id}" value="${escapeHtml(e.endTime||'')}"></div>
       </div>
-      <div class="field"><label>Location</label><input type="text" id="edit-location-${id}" value="${escapeHtml(e.location)}" maxlength="100"></div>
+      <div class="field"><label for="edit-location-${id}">Location</label><input type="text" id="edit-location-${id}" value="${escapeHtml(e.location)}" maxlength="100"></div>
       <div class="row">
-        <div class="field"><label>Your name</label><input type="text" id="edit-host-${id}" value="${escapeHtml(e.hostName)}" maxlength="60"></div>
-        <div class="field"><label>Contact</label><input type="text" id="edit-contact-${id}" value="${escapeHtml(e.hostContact||'')}" maxlength="80"></div>
+        <div class="field"><label for="edit-host-${id}">Your name</label><input type="text" id="edit-host-${id}" value="${escapeHtml(e.hostName)}" maxlength="60"></div>
+        <div class="field"><label for="edit-contact-${id}">Contact</label><input type="text" id="edit-contact-${id}" value="${escapeHtml(e.hostContact||'')}" maxlength="80"></div>
       </div>
-      <div class="field"><label>Description</label><textarea id="edit-desc-${id}" maxlength="400">${escapeHtml(e.description)}</textarea></div>
-      <div class="field"><label>Volunteers needed</label><input type="number" id="edit-vol-${id}" min="0" max="200" value="${vol0(e)}"></div>
+      <div class="field"><label for="edit-desc-${id}">Description</label><textarea id="edit-desc-${id}" maxlength="400">${escapeHtml(e.description)}</textarea></div>
+      <div class="field"><label for="edit-vol-${id}">Volunteers needed</label><input type="number" id="edit-vol-${id}" min="0" max="200" value="${vol0(e)}"></div>
       ${ui.error ? `<span class="manage-err">${escapeHtml(ui.error)}</span>` : ''}
       <div class="manage-actions">
         <button type="button" class="btn" data-action="save-edit" data-id="${id}">Save changes</button>
@@ -204,17 +208,17 @@ function cardHTML(e){
   const rc = rsvpCache[e.id] || { count: 0, isIn: false, loaded: false };
   const ui = uiState[e.id] || {};
   const googleUrl = buildGoogleCalUrl(e);
-  const photoBlock = e.photoUrl ? `<img class="card-photo" src="${escapeHtml(e.photoUrl)}" alt="">` : '';
+  const photoBlock = e.photoUrl ? `<img class="card-photo" src="${escapeHtml(e.photoUrl)}" alt="Photo or flyer for ${escapeHtml(e.title)}" loading="lazy">` : '';
 
   const actionRow = `
     <div class="action-row">
-      <button type="button" class="rsvp-btn ${rc.isIn ? 'in' : ''}" data-action="rsvp" data-id="${e.id}">${rc.isIn ? '✓ You\u2019re in' : '🙋 I\u2019m in'}</button>
+      <button type="button" class="rsvp-btn ${rc.isIn ? 'in' : ''}" data-action="rsvp" data-id="${e.id}" aria-pressed="${rc.isIn}">${rc.isIn ? '✓ You\u2019re in' : '🙋 I\u2019m in'}</button>
       <span class="rsvp-count">${rc.loaded ? rc.count : '…'} going</span>
       <div class="cal-links">
-        <a href="${googleUrl}" target="_blank" rel="noopener noreferrer">Google</a>
-        <button type="button" data-action="ics" data-id="${e.id}">.ics</button>
+        <a href="${googleUrl}" target="_blank" rel="noopener noreferrer" aria-label="Add to Google Calendar" title="Add to Google Calendar">Google</a>
+        <button type="button" data-action="ics" data-id="${e.id}" aria-label="Download calendar file (.ics)" title="Download for Apple Calendar, Outlook, and others">.ics</button>
       </div>
-      <button type="button" class="manage-btn" data-action="manage-toggle" data-id="${e.id}">Manage</button>
+      <button type="button" class="manage-btn" data-action="manage-toggle" data-id="${e.id}" aria-expanded="${!!ui.open}">Manage</button>
     </div>`;
 
   let managePanel = '';
@@ -223,7 +227,7 @@ function cardHTML(e){
       managePanel = `
         <div class="manage-panel">
           <div class="row" style="align-items:center;">
-            <input type="text" class="code-input" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="••••" data-role="code-input" data-id="${e.id}">
+            <input type="text" class="code-input" id="code-${e.id}" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="••••" autocomplete="off" aria-label="4-digit edit code" data-role="code-input" data-id="${e.id}">
             <button type="button" class="btn subtle" data-action="unlock" data-id="${e.id}">Unlock</button>
             <button type="button" class="manage-btn" data-action="manage-toggle" data-id="${e.id}">Close</button>
           </div>
@@ -247,8 +251,8 @@ function cardHTML(e){
           <h3>${escapeHtml(e.title)}</h3>
         </div>
       </div>
-      <div class="meta-line">🕘&nbsp;<b>${escapeHtml(e.time)}</b></div>
-      <div class="meta-line">📍&nbsp;<b>${escapeHtml(e.location)}</b></div>
+      <div class="meta-line"><span aria-hidden="true">🕘</span><span class="visually-hidden">Time:</span><b>${escapeHtml(e.time)}</b></div>
+      <div class="meta-line"><span aria-hidden="true">📍</span><span class="visually-hidden">Location:</span><b>${escapeHtml(e.location)}</b></div>
       <p class="desc">${escapeHtml(e.description)}</p>
       <div class="foot">
         <span>Hosted by ${escapeHtml(e.hostName || 'a neighbor')}</span>
@@ -259,15 +263,39 @@ function cardHTML(e){
     </article>`;
 }
 
+// The grid is rebuilt from scratch on every change (live snapshot, RSVP
+// counts arriving), so carry over anything a host is mid-way through typing
+// in an open Manage panel, plus which field had focus.
+function snapshotInputs(grid){
+  const values = {};
+  grid.querySelectorAll('input[id], select[id], textarea[id]').forEach(el => { values[el.id] = el.value; });
+  const active = document.activeElement;
+  return { values, focusId: active && grid.contains(active) ? active.id : null };
+}
+function restoreInputs(grid, snap){
+  Object.entries(snap.values).forEach(([id, v]) => {
+    const el = document.getElementById(id);
+    if (el && grid.contains(el)) el.value = v;
+  });
+  if (snap.focusId){
+    const el = document.getElementById(snap.focusId);
+    if (el) el.focus({ preventScroll: true });
+  }
+}
+
 function renderEvents(){
   const grid = document.getElementById('event-grid');
   const today = todayISO();
   let upcoming = allEvents
     .filter(e => e.date >= today)
-    .sort((a,b) => (a.date + a.time).localeCompare(b.date + b.time));
+    .sort((a,b) => sortKey(a).localeCompare(sortKey(b)));
+  const upcomingAll = upcoming;
   if (activeFilter !== 'All') upcoming = upcoming.filter(e => e.category === activeFilter);
 
-  if (upcoming.length === 0){
+  const inputs = snapshotInputs(grid);
+  if (!boardLoaded){
+    // keep the "Loading…" / error placeholder until the first snapshot lands
+  } else if (upcoming.length === 0){
     grid.innerHTML = `<div class="empty-state">Nothing posted ${activeFilter === 'All' ? 'yet' : 'in “' + escapeHtml(activeFilter) + '” yet'} — be the first to <a href="#host">add one</a>.</div>`;
   } else {
     // A malformed document (bad data another client wrote, or a legacy
@@ -277,34 +305,47 @@ function renderEvents(){
       try { return cardHTML(e); }
       catch(err){ console.error('card render failed, skipping', e && e.id, err); return ''; }
     }).join('');
+    restoreInputs(grid, inputs);
     upcoming.forEach(e => ensureRsvpLoaded(e.id));
   }
 
   // stats
-  const now = new Date();
-  const thisMonthCount = allEvents.filter(e => {
-    const d = parseISO(e.date);
-    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && e.date >= today;
-  }).length;
-  const hostSet = new Set(allEvents.filter(e => e.date >= today).map(e => (e.hostName || '').trim().toLowerCase()).filter(Boolean));
-  document.getElementById('stat-month').textContent = thisMonthCount;
-  document.getElementById('stat-hosts').textContent = hostSet.size;
-  const next = allEvents.filter(e => e.date >= today).sort((a,b)=>a.date.localeCompare(b.date))[0];
-  document.getElementById('stat-next').textContent = next ? (MONTHS[parseISO(next.date).getMonth()] + ' ' + parseISO(next.date).getDate()) : '—';
+  if (boardLoaded){
+    const hostSet = new Set(upcomingAll.map(e => (e.hostName || '').trim().toLowerCase()).filter(Boolean));
+    document.getElementById('stat-upcoming').textContent = upcomingAll.length;
+    document.getElementById('stat-hosts').textContent = hostSet.size;
+    const next = upcomingAll[0];
+    document.getElementById('stat-next').textContent = next ? (next.date === today ? 'Today' : labelFor(next)) : '—';
+  }
 
   if (adminUnlocked) renderAdminList();
 }
+let boardLoaded = false;
 renderEvents();
 
+// Every render calls this for every card, so track in-flight fetches --
+// otherwise each count that arrives re-renders and re-requests all the
+// others that haven't landed yet. Counts are batched into one re-render.
+const rsvpPending = new Set();
+let rsvpRenderQueued = false;
 function ensureRsvpLoaded(id){
-  if (!firestore || (rsvpCache[id] && rsvpCache[id].loaded)) return;
+  if (!firestore || rsvpPending.has(id) || (rsvpCache[id] && rsvpCache[id].loaded)) return;
+  rsvpPending.add(id);
   const vid = getVisitorId();
   getDocs(query(collection(firestore, 'events', id, 'rsvps'), limit(200)))
     .then(snap => {
       rsvpCache[id] = { count: snap.size, isIn: snap.docs.some(d => d.id === vid), loaded: true };
-      renderEvents();
     })
-    .catch(() => {});
+    .catch(() => {
+      rsvpCache[id] = { count: 0, isIn: false, loaded: true };
+    })
+    .finally(() => {
+      rsvpPending.delete(id);
+      if (!rsvpRenderQueued){
+        rsvpRenderQueued = true;
+        requestAnimationFrame(() => { rsvpRenderQueued = false; renderEvents(); });
+      }
+    });
 }
 
 async function deleteEventAndRsvps(id){
@@ -327,6 +368,11 @@ async function pruneOldEvents(){
     await Promise.all(snap.docs.map(d => deleteEventAndRsvps(d.id)));
   } catch(e){ /* silent -- cleanup is best-effort */ }
 }
+
+document.getElementById('event-grid').addEventListener('keydown', (ev) => {
+  const input = ev.target.closest('[data-role="code-input"]');
+  if (input && ev.key === 'Enter'){ ev.preventDefault(); handleUnlock(input.dataset.id); }
+});
 
 // ---- event delegation for card actions ----
 document.getElementById('event-grid').addEventListener('click', async (ev) => {
@@ -394,6 +440,8 @@ async function handleUnlock(id){
   }
   uiState[id] = { open: true, unlocked: true, error: null };
   renderEvents();
+  const first = document.getElementById(`edit-title-${id}`);
+  if (first) first.focus();
 }
 
 async function handleSaveEdit(id){
@@ -415,6 +463,10 @@ async function handleSaveEdit(id){
   };
   if (!updated.title || !updated.date || !updated.time || !updated.location || !updated.hostName || !updated.description){
     uiState[id] = { ...uiState[id], error: 'Fill in the required fields.' };
+    return renderEvents();
+  }
+  if (updated.startTime && updated.endTime && updated.endTime <= updated.startTime){
+    uiState[id] = { ...uiState[id], error: 'End time needs to be after the start time.' };
     return renderEvents();
   }
   try{
@@ -451,24 +503,38 @@ try{
   console.error('firebase init failed', e);
 }
 
+function showBoardError(){
+  const grid = document.getElementById('event-grid');
+  grid.innerHTML = '<div class="empty-state">Couldn’t load the board right now — check your connection and reload the page.</div>';
+  grid.setAttribute('aria-busy', 'false');
+}
+
 if (!firestore){
   document.getElementById('form-status').textContent = 'Live posting isn’t available right now.';
   document.getElementById('form-status').className = 'form-status err';
+  showBoardError();
 } else {
   const eventsQuery = query(collection(firestore, 'events'), orderBy('date','asc'), limit(500));
   onSnapshot(eventsQuery,
     snap => {
       allEvents = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      boardLoaded = true;
+      document.getElementById('event-grid').setAttribute('aria-busy', 'false');
       renderEvents();
       pruneOldEvents();
     },
-    err => console.error('events subscription error', err)
+    err => {
+      console.error('events subscription error', err);
+      if (!boardLoaded) showBoardError();
+    }
   );
 }
 
 // ---- form submit ----
 const form = document.getElementById('event-form');
 const statusEl = document.getElementById('form-status');
+// Past-dated events never show on the board, so don't let hosts pick one.
+document.getElementById('f-date').min = todayISO();
 form.addEventListener('submit', async (ev) => {
   ev.preventDefault();
   if (!firestore){
@@ -481,7 +547,7 @@ form.addEventListener('submit', async (ev) => {
   // honeypot — bots that fill every field get a fake success, no write
   if ((fd.get('website') || '').toString().trim()){
     form.reset();
-    statusEl.textContent = 'Posted — it’s on the board below.';
+    statusEl.textContent = 'Posted — it’s on the board now.';
     statusEl.className = 'form-status ok';
     return;
   }
@@ -524,6 +590,16 @@ form.addEventListener('submit', async (ev) => {
     statusEl.className = 'form-status err';
     return;
   }
+  if (data.date < todayISO()){
+    statusEl.textContent = 'Pick today or a later date.';
+    statusEl.className = 'form-status err';
+    return;
+  }
+  if (data.startTime && data.endTime && data.endTime <= data.startTime){
+    statusEl.textContent = 'End time needs to be after the start time.';
+    statusEl.className = 'form-status err';
+    return;
+  }
 
   const submitBtn = document.getElementById('submit-btn');
   submitBtn.disabled = true;
@@ -546,7 +622,7 @@ form.addEventListener('submit', async (ev) => {
     await addDoc(collection(firestore, 'events'), data);
     form.reset();
     try{ localStorage.setItem('mt_last_submit', String(Date.now())); } catch(e){}
-    statusEl.textContent = 'Posted — it’s on the board below.';
+    statusEl.textContent = 'Posted — it’s on the board now.';
     statusEl.className = 'form-status ok';
     document.getElementById('board').scrollIntoView({ behavior:'smooth', block:'start' });
   } catch(e){
@@ -638,12 +714,19 @@ function closeAdmin(){
   if (location.hash === '#admin') history.replaceState(null, '', location.pathname + location.search);
 }
 function checkAdminHash(){
-  if (location.hash === '#admin') adminOverlay.hidden = false;
+  if (location.hash !== '#admin') return;
+  adminOverlay.hidden = false;
+  const pass = document.getElementById('admin-pass');
+  if (!adminUnlocked && pass) pass.focus();
 }
+document.addEventListener('keydown', ev => {
+  if (ev.key === 'Escape' && !adminOverlay.hidden) closeAdmin();
+});
 checkAdminHash();
 window.addEventListener('hashchange', checkAdminHash);
 
-document.getElementById('admin-unlock').addEventListener('click', async () => {
+document.getElementById('admin-gate').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
   const val = document.getElementById('admin-pass').value;
   const errEl = document.getElementById('admin-error');
   let hash;

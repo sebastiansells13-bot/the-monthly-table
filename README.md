@@ -28,7 +28,7 @@ Each document (auto-generated id), collection `events`:
 
 Each event also has an `events/{id}/rsvps/{visitorId}` subcollection — one doc per "I'm in" click, keyed by a random id the page stores in the visitor's `localStorage` (`mt_visitor_id`), so a person's RSVP is idempotent per browser with no login. The count shown on a card is the subcollection size, never a counter field (counters aren't safe under Firestore's last-writer-wins writes).
 
-The board only shows events with `date >= today`; sorting is ascending by `date` then `time` string. Category → accent color mapping lives in the `CATS` object near the top of `docs/app.js`.
+The board only shows events with `date >= today`; sorting is ascending by `date`, then `startTime` (falling back to the free-text `time` when a host didn't set one). Category → accent color mapping lives in the `CATS` object near the top of `docs/app.js`.
 
 ### `subscribers` schema
 
