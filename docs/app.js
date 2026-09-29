@@ -1,11 +1,14 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
 import {
-  getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, setDoc,
-  onSnapshot, query, where, orderBy, limit, getDocs
+  getFirestore, collection, doc, deleteDoc, setDoc,
+  onSnapshot, query, orderBy, limit, getDocs
 } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
 import {
   getStorage, ref as storageRef, uploadBytes, getDownloadURL
 } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-storage.js";
+import {
+  getFunctions, httpsCallable
+} from "https://www.gstatic.com/firebasejs/12.19.0/firebase-functions.js";
 
 // Public web config -- safe to ship client-side; Firebase's access model is
 // enforced by Firestore/Storage security rules, not by hiding this object.
@@ -30,6 +33,7 @@ const CAT_LIST = Object.keys(CATS);
 const MONTHS = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
 const ADMIN_HASH = '5f4f6fab154b4e5fe5789d4fd8aebdf94c1f75926e0c7b4335bd05e7f72e2b35';
 const SUBMIT_COOLDOWN_MS = 45000;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function pad(n){ return String(n).padStart(2,'0'); }
 function todayISO(){
@@ -149,10 +153,29 @@ renderChips();
 
 let allEvents = [];
 const rsvpCache = {};   // id -> { count, isIn, loaded }
-const uiState = {};     // id -> { open, unlocked, error, confirmingDelete }
+const uiState = {};     // id -> { open, error, confirmingDelete, busy }
+// id -> signed manage-link token, only for events this visitor opened from
+// their emailed link. Kept in memory only (and stripped from the URL), so it
+// isn't left in history or a copied address bar.
+const manageTokens = {};
+let pendingFocusId = null;
 let firestore = null;
 let storageService = null;
+let functionsService = null;
 let adminUnlocked = false;
+let adminPassphrase = '';
+
+function callFn(name, data){
+  if (!functionsService) return Promise.reject(new Error('functions unavailable'));
+  return httpsCallable(functionsService, name)(data).then(r => r.data);
+}
+// Errors the Cloud Functions throw on purpose carry a message meant for the
+// visitor; anything else (network, crash) gets the caller's fallback.
+function friendlyError(err, fallback){
+  const code = err && err.code ? String(err.code).replace(/^functions\//, '') : '';
+  if (['invalid-argument','permission-denied','not-found','resource-exhausted'].includes(code) && err.message) return err.message;
+  return fallback;
+}
 
 function vol0(e){ return Number(e.volunteersNeeded) || 0; }
 // "9:00" vs "10:00" don't sort as strings, so prefer the HH:MM start time
@@ -165,9 +188,9 @@ function editPanelHTML(e, ui){
   if (ui.confirmingDelete){
     return `
       <div class="manage-panel">
-        <span class="manage-err">Remove this listing for everyone? This can't be undone.</span>
+        <span class="manage-err">${escapeHtml(ui.error || "Remove this listing for everyone? This can't be undone.")}</span>
         <div class="manage-actions">
-          <button type="button" class="btn danger" data-action="confirm-cancel" data-id="${id}">Yes, remove it</button>
+          <button type="button" class="btn danger" data-action="confirm-cancel" data-id="${id}" ${ui.busy ? 'disabled' : ''}>${ui.busy ? 'Removing…' : 'Yes, remove it'}</button>
           <button type="button" class="btn subtle" data-action="deny-cancel" data-id="${id}">No, keep it</button>
         </div>
       </div>`;
@@ -194,7 +217,7 @@ function editPanelHTML(e, ui){
       <div class="field"><label for="edit-vol-${id}">Volunteers needed</label><input type="number" id="edit-vol-${id}" min="0" max="200" value="${vol0(e)}"></div>
       ${ui.error ? `<span class="manage-err">${escapeHtml(ui.error)}</span>` : ''}
       <div class="manage-actions">
-        <button type="button" class="btn" data-action="save-edit" data-id="${id}">Save changes</button>
+        <button type="button" class="btn" data-action="save-edit" data-id="${id}" ${ui.busy ? 'disabled' : ''}>${ui.busy ? 'Saving…' : 'Save changes'}</button>
         <button type="button" class="btn danger" data-action="cancel-event" data-id="${id}">Cancel this event</button>
         <button type="button" class="btn subtle" data-action="manage-toggle" data-id="${id}">Close</button>
       </div>
@@ -218,28 +241,13 @@ function cardHTML(e){
         <a href="${googleUrl}" target="_blank" rel="noopener noreferrer" aria-label="Add to Google Calendar" title="Add to Google Calendar">Google</a>
         <button type="button" data-action="ics" data-id="${e.id}" aria-label="Download calendar file (.ics)" title="Download for Apple Calendar, Outlook, and others">.ics</button>
       </div>
-      <button type="button" class="manage-btn" data-action="manage-toggle" data-id="${e.id}" aria-expanded="${!!ui.open}">Manage</button>
+      ${manageTokens[e.id] ? `<button type="button" class="manage-btn" data-action="manage-toggle" data-id="${e.id}" aria-expanded="${!!ui.open}">Edit</button>` : ''}
     </div>`;
 
-  let managePanel = '';
-  if (ui.open){
-    if (!ui.unlocked){
-      managePanel = `
-        <div class="manage-panel">
-          <div class="row" style="align-items:center;">
-            <input type="text" class="code-input" id="code-${e.id}" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="••••" autocomplete="off" aria-label="4-digit edit code" data-role="code-input" data-id="${e.id}">
-            <button type="button" class="btn subtle" data-action="unlock" data-id="${e.id}">Unlock</button>
-            <button type="button" class="manage-btn" data-action="manage-toggle" data-id="${e.id}">Close</button>
-          </div>
-          ${ui.error ? `<span class="manage-err">${escapeHtml(ui.error)}</span>` : `<span class="form-note">Only the person who posted this has the code.</span>`}
-        </div>`;
-    } else {
-      managePanel = editPanelHTML(e, ui);
-    }
-  }
+  const managePanel = ui.open && manageTokens[e.id] ? editPanelHTML(e, ui) : '';
 
   return `
-    <article class="card">
+    <article class="card${ui.open ? ' managing' : ''}" id="event-${escapeHtml(e.id)}">
       ${photoBlock}
       <div class="top-row">
         <div class="date-tab">
@@ -307,6 +315,17 @@ function renderEvents(){
     }).join('');
     restoreInputs(grid, inputs);
     upcoming.forEach(e => ensureRsvpLoaded(e.id));
+    if (pendingFocusId){
+      const card = document.getElementById('event-' + pendingFocusId);
+      if (card){
+        pendingFocusId = null;
+        // Instant, not smooth: this usually runs while the page is still
+        // loading, and a smooth scroll gets cancelled by layout shifts.
+        card.scrollIntoView({ behavior: 'instant', block: 'start' });
+        const first = card.querySelector('input, select, textarea');
+        if (first) first.focus({ preventScroll: true });
+      }
+    }
   }
 
   // stats
@@ -348,32 +367,6 @@ function ensureRsvpLoaded(id){
     });
 }
 
-async function deleteEventAndRsvps(id){
-  if (!firestore) return;
-  try{
-    const rsvpSnap = await getDocs(query(collection(firestore, 'events', id, 'rsvps'), limit(200)));
-    await Promise.all(rsvpSnap.docs.map(r => deleteDoc(doc(firestore, 'events', id, 'rsvps', r.id))));
-  } catch(e){ /* best effort */ }
-  try{ await deleteDoc(doc(firestore, 'events', id)); } catch(e){ console.error('delete failed', e); }
-}
-
-let prunedOnce = false;
-async function pruneOldEvents(){
-  if (!firestore || prunedOnce) return;
-  prunedOnce = true;
-  try{
-    const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 60);
-    const cutoffISO = cutoff.getFullYear() + '-' + pad(cutoff.getMonth()+1) + '-' + pad(cutoff.getDate());
-    const snap = await getDocs(query(collection(firestore, 'events'), where('date','<',cutoffISO), limit(20)));
-    await Promise.all(snap.docs.map(d => deleteEventAndRsvps(d.id)));
-  } catch(e){ /* silent -- cleanup is best-effort */ }
-}
-
-document.getElementById('event-grid').addEventListener('keydown', (ev) => {
-  const input = ev.target.closest('[data-role="code-input"]');
-  if (input && ev.key === 'Enter'){ ev.preventDefault(); handleUnlock(input.dataset.id); }
-});
-
 // ---- event delegation for card actions ----
 document.getElementById('event-grid').addEventListener('click', async (ev) => {
   const btn = ev.target.closest('[data-action]');
@@ -382,7 +375,6 @@ document.getElementById('event-grid').addEventListener('click', async (ev) => {
   if (action === 'rsvp') return handleRsvp(id);
   if (action === 'ics') return handleIcs(id);
   if (action === 'manage-toggle') return handleManageToggle(id);
-  if (action === 'unlock') return handleUnlock(id);
   if (action === 'save-edit') return handleSaveEdit(id);
   if (action === 'cancel-event') return handleCancelPrompt(id);
   if (action === 'confirm-cancel') return handleConfirmCancel(id);
@@ -415,38 +407,14 @@ async function handleIcs(id){
 function handleManageToggle(id){
   const cur = uiState[id];
   uiState[id] = (cur && cur.open)
-    ? { open: false, unlocked: false, error: null, confirmingDelete: false }
-    : { ...(cur||{}), open: true, error: null };
+    ? { open: false, error: null, confirmingDelete: false }
+    : { open: true, error: null };
   renderEvents();
-}
-
-async function handleUnlock(id){
-  const input = document.querySelector(`[data-role="code-input"][data-id="${id}"]`);
-  const val = input ? input.value.trim() : '';
-  if (!/^\d{4}$/.test(val)){
-    uiState[id] = { ...(uiState[id]||{}), open: true, error: 'Enter the 4-digit code.' };
-    return renderEvents();
-  }
-  const e = allEvents.find(x => x.id === id);
-  let hash;
-  try{ hash = await sha256Hex(val); }
-  catch(err){
-    uiState[id] = { ...(uiState[id]||{}), open: true, error: "Edit codes aren't available in this browser." };
-    return renderEvents();
-  }
-  if (!e || !e.editCodeHash || e.editCodeHash !== hash){
-    uiState[id] = { ...(uiState[id]||{}), open: true, error: "That code doesn't match." };
-    return renderEvents();
-  }
-  uiState[id] = { open: true, unlocked: true, error: null };
-  renderEvents();
-  const first = document.getElementById(`edit-title-${id}`);
-  if (first) first.focus();
 }
 
 async function handleSaveEdit(id){
   const e = allEvents.find(x => x.id === id);
-  if (!e) return;
+  if (!e || !manageTokens[id]) return;
   const g = field => { const el = document.getElementById(`edit-${field}-${id}`); return el ? el.value : ''; };
   const updated = {
     title: g('title').trim(),
@@ -469,14 +437,17 @@ async function handleSaveEdit(id){
     uiState[id] = { ...uiState[id], error: 'End time needs to be after the start time.' };
     return renderEvents();
   }
+  uiState[id] = { ...uiState[id], busy: true, error: null };
+  renderEvents();
   try{
-    await updateDoc(doc(firestore, 'events', id), updated);
-    uiState[id] = { open: false, unlocked: false, error: null };
-    renderEvents();
+    await callFn('updateEvent', { token: manageTokens[id], event: updated });
+    uiState[id] = { open: false, error: null };
+    showManageBanner('Saved — your changes are live.');
   } catch(err){
-    uiState[id] = { ...uiState[id], error: "Couldn't save — please try again." };
-    renderEvents();
+    console.error('save failed', err);
+    uiState[id] = { ...uiState[id], busy: false, error: friendlyError(err, "Couldn't save — please try again.") };
   }
+  renderEvents();
 }
 
 function handleCancelPrompt(id){
@@ -488,10 +459,27 @@ function handleDenyCancel(id){
   renderEvents();
 }
 async function handleConfirmCancel(id){
-  await deleteEventAndRsvps(id);
-  delete uiState[id];
-  allEvents = allEvents.filter(e => e.id !== id);
+  if (!manageTokens[id]) return;
+  uiState[id] = { ...uiState[id], busy: true, error: null };
   renderEvents();
+  try{
+    await callFn('cancelEvent', { token: manageTokens[id] });
+    delete uiState[id];
+    delete manageTokens[id];
+    allEvents = allEvents.filter(e => e.id !== id);
+    showManageBanner('Your event was removed from the board.');
+  } catch(err){
+    console.error('cancel failed', err);
+    uiState[id] = { ...uiState[id], busy: false, error: friendlyError(err, "Couldn't remove it — please try again.") };
+  }
+  renderEvents();
+}
+
+const manageBanner = document.getElementById('manage-banner');
+function showManageBanner(text, isError){
+  manageBanner.textContent = text;
+  manageBanner.className = 'manage-banner' + (isError ? ' err' : '');
+  manageBanner.hidden = false;
 }
 
 // ---- Firebase wiring ----
@@ -499,6 +487,7 @@ try{
   const app = initializeApp(firebaseConfig);
   firestore = getFirestore(app);
   try{ storageService = getStorage(app); } catch(e){ storageService = null; }
+  try{ functionsService = getFunctions(app, 'us-central1'); } catch(e){ functionsService = null; }
 } catch(e){
   console.error('firebase init failed', e);
 }
@@ -521,7 +510,6 @@ if (!firestore){
       boardLoaded = true;
       document.getElementById('event-grid').setAttribute('aria-busy', 'false');
       renderEvents();
-      pruneOldEvents();
     },
     err => {
       console.error('events subscription error', err);
@@ -547,7 +535,7 @@ form.addEventListener('submit', async (ev) => {
   // honeypot — bots that fill every field get a fake success, no write
   if ((fd.get('website') || '').toString().trim()){
     form.reset();
-    statusEl.textContent = 'Posted — it’s on the board now.';
+    statusEl.textContent = 'Posted! Check your email for a link to edit or cancel it.';
     statusEl.className = 'form-status ok';
     return;
   }
@@ -562,9 +550,9 @@ form.addEventListener('submit', async (ev) => {
     return;
   }
 
-  const editCode = (fd.get('editCode') || '').toString().trim();
-  if (!/^\d{4}$/.test(editCode)){
-    statusEl.textContent = 'Edit code must be exactly 4 digits.';
+  const email = (fd.get('email') || '').toString().trim();
+  if (!EMAIL_RE.test(email) || email.length > 254){
+    statusEl.textContent = 'Add a valid email so we can send your edit link.';
     statusEl.className = 'form-status err';
     return;
   }
@@ -582,8 +570,7 @@ form.addEventListener('submit', async (ev) => {
     description: (fd.get('description') || '').toString().trim(),
     volunteersNeeded: Number(fd.get('volunteersNeeded')) || 0,
     photoAssetId: '',
-    photoUrl: '',
-    createdAt: Date.now()
+    photoUrl: ''
   };
   if (!data.title || !data.category || !data.date || !data.time || !data.location || !data.hostName || !data.description){
     statusEl.textContent = 'Fill in the required fields first.';
@@ -606,8 +593,6 @@ form.addEventListener('submit', async (ev) => {
   statusEl.textContent = 'Posting…';
   statusEl.className = 'form-status';
   try{
-    data.editCodeHash = await sha256Hex(editCode);
-
     const photo = fd.get('photo');
     if (photo && photo.size > 0 && storageService){
       try{
@@ -619,15 +604,19 @@ form.addEventListener('submit', async (ev) => {
       } catch(err){ console.error('photo upload failed', err); }
     }
 
-    await addDoc(collection(firestore, 'events'), data);
+    const result = await callFn('createEvent', { event: data, email, website: '' });
     form.reset();
     try{ localStorage.setItem('mt_last_submit', String(Date.now())); } catch(e){}
-    statusEl.textContent = 'Posted — it’s on the board now.';
-    statusEl.className = 'form-status ok';
-    document.getElementById('board').scrollIntoView({ behavior:'smooth', block:'start' });
+    if (result && result.emailSent === false){
+      statusEl.textContent = 'Posted — but we couldn’t send your edit link. Use “Lost your edit link?” to try again.';
+      statusEl.className = 'form-status err';
+    } else {
+      statusEl.textContent = `Posted! Check ${email} for a link to edit or cancel it.`;
+      statusEl.className = 'form-status ok';
+    }
   } catch(e){
     console.error('submit failed', e);
-    statusEl.textContent = 'Couldn’t post that — please try again.';
+    statusEl.textContent = friendlyError(e, 'Couldn’t post that — please try again.');
     statusEl.className = 'form-status err';
   } finally{
     submitBtn.disabled = false;
@@ -635,7 +624,6 @@ form.addEventListener('submit', async (ev) => {
 });
 
 // ---- notify signup ----
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const notifyForm = document.getElementById('notify-form');
 const notifyStatus = document.getElementById('notify-status');
 notifyForm.addEventListener('submit', async (ev) => {
@@ -701,6 +689,66 @@ function checkUnsubscribeHash(){
 checkUnsubscribeHash();
 window.addEventListener('hashchange', checkUnsubscribeHash);
 
+// ---- manage links ----
+// The confirmation email links to #manage=<token>. The fragment never
+// reaches a server (not GitHub Pages, not a Referer header); the page hands
+// it to the getManageAccess function to check, then drops it from the URL.
+async function checkManageHash(){
+  const m = /^#manage=(.+)$/.exec(location.hash);
+  if (!m) return;
+  const token = decodeURIComponent(m[1]);
+  history.replaceState(null, '', location.pathname + location.search + '#board');
+  showManageBanner('Checking your edit link…');
+  document.getElementById('board').scrollIntoView({ behavior: 'instant', block: 'start' });
+  try{
+    const { eventId } = await callFn('getManageAccess', { token });
+    manageTokens[eventId] = token;
+    uiState[eventId] = { open: true, error: null };
+    pendingFocusId = eventId;
+    const known = allEvents.find(e => e.id === eventId);
+    if (known && known.date < todayISO()){
+      showManageBanner('That event’s date has passed, so it’s no longer on the board.', true);
+      pendingFocusId = null;
+    } else {
+      showManageBanner('You’re editing your event — make changes below, or cancel it.');
+    }
+    renderEvents();
+  } catch(err){
+    console.error('manage link check failed', err);
+    showManageBanner(friendlyError(err, 'Couldn’t open that edit link — please try again.'), true);
+  }
+}
+checkManageHash();
+window.addEventListener('hashchange', checkManageHash);
+
+const resendForm = document.getElementById('resend-form');
+const resendStatus = document.getElementById('resend-status');
+resendForm.addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const email = document.getElementById('resend-email').value.trim();
+  if (!EMAIL_RE.test(email)){
+    resendStatus.textContent = 'That doesn’t look like a valid email address.';
+    resendStatus.className = 'form-status err';
+    return;
+  }
+  const btn = document.getElementById('resend-submit');
+  btn.disabled = true;
+  resendStatus.textContent = 'Sending…';
+  resendStatus.className = 'form-status';
+  try{
+    await callFn('resendManageLinks', { email });
+    resendForm.reset();
+    resendStatus.textContent = 'If that email has upcoming events on the board, a new link is on its way.';
+    resendStatus.className = 'form-status ok';
+  } catch(err){
+    console.error('resend failed', err);
+    resendStatus.textContent = friendlyError(err, 'Couldn’t send that — please try again.');
+    resendStatus.className = 'form-status err';
+  } finally{
+    btn.disabled = false;
+  }
+});
+
 // ---- admin panel ----
 // No visible control for this on purpose -- opened only by visiting the page
 // with #admin in the URL (e.g. bookmark the-monthly-table/#admin). This is
@@ -734,6 +782,9 @@ document.getElementById('admin-gate').addEventListener('submit', async (ev) => {
   catch(e){ errEl.textContent = "Admin unlock isn't available in this browser."; return; }
   if (hash === ADMIN_HASH){
     adminUnlocked = true;
+    // Removal is checked again server-side (adminRemoveEvent), so the
+    // passphrase itself rides along with each remove request.
+    adminPassphrase = val;
     errEl.textContent = '';
     document.getElementById('admin-gate').hidden = true;
     document.getElementById('admin-list').hidden = false;
@@ -761,11 +812,21 @@ function renderAdminList(){
     </div>`).join('');
   el.querySelectorAll('[data-admin-remove]').forEach(b => {
     b.addEventListener('click', async () => {
+      const id = b.dataset.adminRemove;
       b.disabled = true;
-      await deleteEventAndRsvps(b.dataset.adminRemove);
-      allEvents = allEvents.filter(e => e.id !== b.dataset.adminRemove);
-      renderAdminList();
-      renderEvents();
+      b.textContent = 'Removing…';
+      document.getElementById('admin-remove-error').textContent = '';
+      try{
+        await callFn('adminRemoveEvent', { passphrase: adminPassphrase, eventId: id });
+        allEvents = allEvents.filter(e => e.id !== id);
+        renderAdminList();
+        renderEvents();
+      } catch(err){
+        console.error('admin remove failed', err);
+        b.disabled = false;
+        b.textContent = 'Retry';
+        document.getElementById('admin-remove-error').textContent = friendlyError(err, 'Couldn’t remove that — try again.');
+      }
     });
   });
 }

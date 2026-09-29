@@ -22,7 +22,7 @@
   aren't available on this deployment. Everything below IS enforced by the
   browser regardless of delivery method.
 -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' https://firebasestorage.googleapis.com; connect-src 'self' https://*.googleapis.com; object-src 'none'; base-uri 'self'; form-action 'self';">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' https://firebasestorage.googleapis.com; connect-src 'self' https://*.googleapis.com https://us-central1-the-monthly-table.cloudfunctions.net; object-src 'none'; base-uri 'self'; form-action 'self';">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=Karla:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap">
 <style>
   :root{
@@ -288,13 +288,16 @@
   }
   .manage-panel .row{display:flex; gap:8px; flex-wrap:wrap;}
   .manage-panel .row .field{flex:1 1 120px; min-width:0;}
-  .code-input, .manage-panel .code-input{
-    max-width:130px; font-family:"Karla",sans-serif; font-size:14px; letter-spacing:0.15em;
-    background:var(--paper-tint); border:1px solid var(--line-strong); border-radius:2px; padding:8px 10px; color:var(--ink);
-  }
   .manage-err{color:var(--chile-ink); font-size:12px; font-weight:600;}
   .manage-actions{display:flex; gap:8px; flex-wrap:wrap;}
   .manage-actions .btn{padding:7px 13px; font-size:12.5px;}
+
+  .manage-banner{
+    margin:0 0 18px; padding:12px 16px; font-size:14px; font-weight:600;
+    background:var(--turquoise-soft); color:var(--turquoise); border-radius:var(--radius);
+  }
+  .manage-banner.err{background:var(--chile-soft); color:var(--chile-ink);}
+  .card.managing{border-color:var(--turquoise); box-shadow:0 0 0 1px var(--turquoise), var(--shadow);}
 
   .empty-state{
     grid-column:1/-1; text-align:center; padding:50px 20px; color:var(--ink-soft);
@@ -314,6 +317,16 @@
   .host-intro li{font-size:13.5px; color:var(--ink-soft); display:flex; gap:9px;}
   .host-intro li::before{content:"—"; color:var(--chile); flex:none;}
 
+  .resend{margin-top:28px; padding-top:20px; border-top:1px dashed var(--line-strong);}
+  .resend h3{font-size:15px; font-family:"Karla",sans-serif; font-weight:700;}
+  .resend p{margin:6px 0 10px; font-size:13px; color:var(--ink-soft);}
+  .resend-row{display:flex; gap:8px; flex-wrap:wrap;}
+  .resend-row input{
+    flex:1 1 180px; font-family:"Karla",sans-serif; font-size:14px; color:var(--ink);
+    background:var(--paper-tint); border:1px solid var(--line-strong); border-radius:2px; padding:9px 11px;
+  }
+  .resend .form-status{display:block; margin-top:8px; font-size:13px;}
+
   form#event-form{display:flex; flex-direction:column; gap:14px;}
   .field-row{display:grid; grid-template-columns:1fr 1fr; gap:14px;}
   .field{display:flex; flex-direction:column; gap:6px;}
@@ -324,7 +337,6 @@
     padding:10px 11px;
   }
   .field textarea{resize:vertical; min-height:76px;}
-  .field input.code-input{max-width:130px; letter-spacing:0.15em;}
   .field input::placeholder, .field textarea::placeholder{color:var(--ink-soft); opacity:0.7;}
   .field input[type="file"]{padding:7px 8px; font-size:13px;}
   .field-hint{font-size:12px; color:var(--ink-soft); font-weight:400; text-transform:none; letter-spacing:0;}
@@ -503,10 +515,11 @@
       <div class="head">
         <div>
           <h2>What's coming up</h2>
-          <p>Sorted by date, soonest first. RSVP, add one to your calendar, or manage a listing you've already posted.</p>
+          <p>Sorted by date, soonest first. RSVP or add one to your calendar. Posted one? The link in your confirmation email lets you edit it.</p>
         </div>
         <div class="chips" id="chips"></div>
       </div>
+      <p class="manage-banner" id="manage-banner" role="status" hidden></p>
       <div class="event-grid" id="event-grid" aria-live="polite" aria-busy="true">
         <div class="empty-state">Loading the board…</div>
       </div>
@@ -523,9 +536,19 @@
           <ul>
             <li>Pick a date, time, and a place people can actually find.</li>
             <li>Say how many hands you need, if any.</li>
-            <li>Set a 4-digit code so you can edit or cancel it later.</li>
+            <li>Add your email — we’ll send you a private link to edit or cancel it later.</li>
             <li>Leave a way for people to reach you if plans change.</li>
           </ul>
+          <form class="resend" id="resend-form">
+            <h3>Lost your edit link?</h3>
+            <p>Enter the email you posted with and we’ll send links for your upcoming events.</p>
+            <div class="resend-row">
+              <label for="resend-email" class="visually-hidden">Email address</label>
+              <input id="resend-email" type="email" placeholder="you@example.com" required maxlength="254" autocomplete="email">
+              <button type="submit" class="btn subtle" id="resend-submit">Send it again</button>
+            </div>
+            <span class="form-status" id="resend-status" role="status"></span>
+          </form>
         </div>
         <form id="event-form">
           <div class="field-row">
@@ -594,9 +617,9 @@
             </div>
           </div>
           <div class="field">
-            <label for="f-code">4-digit edit code</label>
-            <input id="f-code" name="editCode" type="text" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" aria-describedby="f-code-hint" placeholder="1234" required class="code-input" autocomplete="off">
-            <span class="field-hint" id="f-code-hint">Only you'll know this — use it later to edit or cancel the listing. There's no reset if you lose it.</span>
+            <label for="f-email">Your email <span class="field-hint">(private — never shown on the board)</span></label>
+            <input id="f-email" name="email" type="email" placeholder="you@example.com" required maxlength="254" autocomplete="email" aria-describedby="f-email-hint">
+            <span class="field-hint" id="f-email-hint">We’ll email you a link to edit or cancel this listing. To show a way to reach you on the board, use Contact above.</span>
           </div>
           <div class="visually-hidden" aria-hidden="true">
             <label for="f-website">Leave this field blank</label>
@@ -634,6 +657,7 @@
       <button type="submit" class="btn" id="admin-unlock">Unlock</button>
       <p class="form-status err" id="admin-error" role="alert"></p>
     </form>
+    <p class="form-status err" id="admin-remove-error" role="alert"></p>
     <div id="admin-list" hidden></div>
   </div>
 </div>
