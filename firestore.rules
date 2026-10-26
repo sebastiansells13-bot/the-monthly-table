@@ -3,59 +3,14 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function isOptionalString(d, field, maxLen) {
-      return !(field in d) || (d[field] is string && d[field].size() <= maxLen);
-    }
-
-    function isOptionalTime(d, field) {
-      return !(field in d) || d[field] == '' || (d[field] is string && d[field].matches('^[0-9]{2}:[0-9]{2}$'));
-    }
-
-    function isOptionalPhotoUrl(d) {
-      // Must be empty, or a real download URL from this project's own Storage
-      // bucket -- prevents a write from pointing an event's photo at an
-      // arbitrary external URL (hotlinking / tracking pixels / defacement)
-      // that never went through the app's own upload flow.
-      return !('photoUrl' in d) || d.photoUrl == ''
-        || (d.photoUrl is string
-            && d.photoUrl.matches('^https://firebasestorage\\.googleapis\\.com/v0/b/the-monthly-table\\.firebasestorage\\.app/.*$'));
-    }
-
-    function isOptionalHash(d, field) {
-      // A SHA-256 hex digest, or absent -- doesn't verify the caller KNOWS
-      // the code (no auth means we can't), just that the field holds the
-      // right shape rather than arbitrary data.
-      return !(field in d) || (d[field] is string && d[field].matches('^[0-9a-f]{64}$'));
-    }
-
-    function isValidEvent(d) {
-      return d.title is string && d.title.size() > 0 && d.title.size() <= 80
-        && d.category in ['Food Distribution','Volunteer Day','Community Meal','Wellness & Care','Supply Drive']
-        && d.date is string && d.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
-        && d.time is string && d.time.size() <= 40
-        && d.location is string && d.location.size() > 0 && d.location.size() <= 100
-        && d.hostName is string && d.hostName.size() > 0 && d.hostName.size() <= 60
-        && d.description is string && d.description.size() > 0 && d.description.size() <= 400
-        && d.volunteersNeeded is number && d.volunteersNeeded >= 0 && d.volunteersNeeded <= 200
-        && isOptionalString(d, 'hostContact', 80)
-        && isOptionalString(d, 'photoAssetId', 300)
-        && isOptionalTime(d, 'startTime')
-        && isOptionalTime(d, 'endTime')
-        && isOptionalPhotoUrl(d)
-        && isOptionalHash(d, 'editCodeHash');
-    }
-
     match /events/{eventId} {
-      // Open board: anyone can read and post, matching the site's "no login" design.
-      // The 4-digit edit code / admin passphrase are UI-level friction only (documented
-      // in the README, along with why they don't hold up against a motivated reader of
-      // this public dataset) -- Firestore rules can't verify "this caller knows the
-      // code" without real auth, so update/delete stay open here. What these rules DO
-      // add: real server-side validation on create/update.
+      // Anyone can read the board. Nobody can write it directly from a
+      // browser: creating, editing, and cancelling all go through the Cloud
+      // Functions in functions/index.js, which validate the event and check
+      // the host's emailed manage link (or the admin passphrase) server-side.
+      // The Admin SDK those functions use bypasses these rules.
       allow read: if true;
-      allow create: if isValidEvent(request.resource.data);
-      allow update: if isValidEvent(request.resource.data);
-      allow delete: if true;
+      allow write: if false;
 
       match /rsvps/{rsvpId} {
         allow read: if true;
@@ -65,6 +20,9 @@ service cloud.firestore {
         allow delete: if true;
       }
     }
+
+    // eventOwners (each event's host email) and rateLimits are server-only.
+    // Firestore denies anything without a matching rule, so they have none.
 
     match /subscribers/{token} {
       // Email addresses are the one thing in this whole database that must

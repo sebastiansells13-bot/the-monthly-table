@@ -22,9 +22,14 @@ Each document (auto-generated id), collection `events`:
 | `hostContact` | string | optional, free text |
 | `description` | string | required, ≤400 chars |
 | `volunteersNeeded` | number | optional, `0` = not shown on the card |
-| `editCodeHash` | string | SHA-256 hex of the 4-digit code the host set at submission — lets them edit/cancel later. Never store the plain code. |
 | `photoAssetId` / `photoUrl` | string | optional, set when a host attaches a photo |
 | `createdAt` | number | `Date.now()` epoch ms |
+
+Events are **read-only from the browser.** `createEvent`, `updateEvent`, `cancelEvent`, and `adminRemoveEvent` in `functions/index.js` are the only way to write one. They validate every field server-side. Events posted before this change may still carry an `editCodeHash` field; nothing reads it any more.
+
+### `eventOwners` and `rateLimits` (server-only)
+
+`eventOwners/{eventId}` holds `{ email, createdAt }`: the host's address, used to send and resend their edit link. `rateLimits/{sha256(key)}` holds `{ count, windowStart }` fixed-window counters (keys are hashed, so no raw IPs or emails are stored). `firestore.rules` has no rule for either collection, so no browser can read or write them. Only the Cloud Functions touch them.
 
 Each event also has an `events/{id}/rsvps/{visitorId}` subcollection — one doc per "I'm in" click, keyed by a random id the page stores in the visitor's `localStorage` (`mt_visitor_id`), so a person's RSVP is idempotent per browser with no login. The count shown on a card is the subcollection size, never a counter field (counters aren't safe under Firestore's last-writer-wins writes).
 
@@ -43,24 +48,26 @@ Signing up writes one of these via the "Get notified" form. Unsubscribing (a lin
 
 ## Features beyond the basic board
 
-- **Host self-service edit/cancel.** Each card has a "Manage" control gated by the 4-digit code the host set at submission (hashed client-side with `crypto.subtle`, compared by hash — the plain code is never stored or transmitted). There's no recovery if a host loses their code; they'd need to repost.
+- **Host self-service edit/cancel via emailed link.** Posting requires an email address. It's stored privately in `eventOwners`, never on the public event. `createEvent` emails the host a link like `…/the-monthly-table/#manage=<token>`. Opening it puts that event's card into edit mode, where the host can save changes or cancel the event. The token is HMAC-signed, the same pattern as the magic links in [aindaco1/pool](https://github.com/aindaco1/pool) (`worker/src/token.js`): it names one event, expires after 90 days, and is checked server-side on every save or cancel. Cancelling the event makes its links dead. The token lives in the URL fragment, so it never reaches GitHub Pages' servers or a `Referer` header. The page also strips it from the address bar once it's read. Hosts who lose the email can use **"Lost your edit link?"** on the host form, which re-sends links for that address's upcoming events. The response is the same whether or not the address has events, so the form can't be used to check who has posted.
 - **RSVP.** "I'm in" writes a doc to that event's `rsvps` subcollection.
 - **Add to calendar.** A Google Calendar link and an `.ics` download per event. If a host didn't set start/end time, the calendar entry is all-day.
 - **Optional event photo.**
-- **Spam deterrence, not prevention.** A hidden honeypot field (`website`) silently no-ops real submissions from simple bots, and a 45-second per-browser cooldown (via `localStorage`) throttles repeat posting. Neither stops a determined actor with dev tools — see security notes below.
-- **Old-listing cleanup.** On load, the page best-effort deletes events more than 60 days past their date (and their `rsvps`). This runs from any visitor's browser, not a server job.
+- **Spam deterrence.** A hidden honeypot field (`website`) silently no-ops submissions from simple bots, and a 45-second per-browser cooldown throttles repeat posting from the page. Server-side, `createEvent` allows 5 posts per IP per hour and 10 per email per day. "Lost your edit link?" allows 3 requests per email per hour and 10 per IP per hour. Admin removal allows 30 attempts per IP per 10 minutes.
+- **Old-listing cleanup.** The `pruneOldEvents` scheduled function runs nightly at 3am Mountain Time. It deletes events more than 60 days past their date, along with their `rsvps`, owner record, and photo, plus expired rate-limit counters.
 - **Email notifications.** A "Get notified" box signs a visitor up by email — no login, no confirmation click (no double opt-in yet; see Known limitations). Two Cloud Functions in `functions/` do the actual sending: `onNewEvent` emails everyone when a new event is posted, `dailyReminder` runs once a day and emails a digest of anything happening the next calendar day. Both use Resend. Unsubscribing is one click from a link in every email — no page visit or form required, though the link does land back on the site to confirm. See "Email notifications setup" below to actually turn this on.
-- **Board admin panel.** No visible link anywhere on purpose — open it by adding `#admin` to the page's URL (e.g. `https://sebastiansells13-bot.github.io/the-monthly-table/#admin`) and reloading if it doesn't pop up immediately. That gets you a passphrase-gated panel (same hash-compare pattern as the edit code) listing every event, past included, with a one-click remove — no explanatory text in the popup itself; read this section instead. Closing the panel clears `#admin` from the URL so a plain reload afterward doesn't reopen it. **This is a UI convenience, not real access control** — see below; removing the visible link only cuts down on a casual visitor noticing the feature exists, it does nothing against anyone who reads the page source (the `#admin` trigger and the `admin-overlay` markup are both sitting right there) or opens dev tools. The current passphrase isn't written down here on purpose (this repo is public) — ask Sebastian, or change it yourself: compute a new SHA-256 hex digest (`printf '%s' 'your new phrase' | shasum -a 256`) and swap the `ADMIN_HASH` constant near the top of `docs/app.js`.
+- **Board admin panel.** No visible link anywhere on purpose — open it by adding `#admin` to the page's URL (e.g. `https://sebastiansells13-bot.github.io/the-monthly-table/#admin`) and reloading if it doesn't pop up immediately. That gets you a passphrase-gated panel (same hash-compare pattern as the edit code) listing every event, past included, with a one-click remove — no explanatory text in the popup itself; read this section instead. Closing the panel clears `#admin` from the URL so a plain reload afterward doesn't reopen it. **This is a UI convenience, not real access control** — see below; removing the visible link only cuts down on a casual visitor noticing the feature exists, it does nothing against anyone who reads the page source (the `#admin` trigger and the `admin-overlay` markup are both sitting right there) or opens dev tools. The current passphrase isn't written down here on purpose (this repo is public) — ask Sebastian, or change it yourself: compute a new SHA-256 hex digest (`printf '%s' 'your new phrase' | shasum -a 256`) and swap the `ADMIN_HASH` constant in **both** `docs/app.js` (unlocks the panel) and `functions/index.js` (checked again by `adminRemoveEvent` before anything is deleted), then redeploy functions.
 
 ## Security model, honestly
 
-The app implements an "anyone can host, no login" design. That tradeoff runs deeper than "someone with dev tools could bypass the UI" — read this section rather than assuming the friction below is stronger than it is.
+The app implements an "anyone can host, no login" design. Here's what does and doesn't hold up. Don't assume the protections below are stronger than described.
 
-**The edit code and admin passphrase are crackable by reading the board, not just by opening dev tools.** `editCodeHash` is stored in the same document that `allow read: if true` makes public. A 4-digit code is only 10,000 possibilities — anyone can pull that hash from the open data feed and brute-force it locally in well under a second, then use "Manage" *exactly as designed* to edit or cancel that event. The admin passphrase has the same shape of problem: `ADMIN_HASH` is a constant in public page source, and unlocking it is a pure client-side hash comparison that never touches the network — brute-forcing it is not just possible but instant and undetectable, unlike even a weak server-side login (which at least makes a request an operator could notice or rate-limit). Longer passphrase entropy makes exhaustive brute-force impractical, but a targeted dictionary/guessing attack is not. **Nothing in this codebase can fix that without adding real accounts**, which the site deliberately doesn't have. Rotate the admin passphrase if you suspect it's been guessed; there's no equivalent fix for a compromised edit code beyond deleting and re-posting the event.
+**Editing an event requires that event's emailed link, enforced server-side.** Event writes go only through Cloud Functions, and `firestore.rules` denies every browser write to `events`. Before `updateEvent` or `cancelEvent` touches anything, it verifies the link's HMAC signature and expiry against `MANAGE_LINK_SECRET`, which lives only in Firebase's secret storage. Nothing public can be used to forge a link: the old 4-digit edit code sat hashed in the public event document and could be brute-forced in under a second, but these tokens can't. The limits: **anyone holding a host's link can edit that listing** (don't forward the email), a link works for 90 days, and rotating `MANAGE_LINK_SECRET` is the only way to kill links for events that still exist. Rotating it kills every link at once; hosts can use "Lost your edit link?" to get new ones.
 
-`firestore.rules` makes `events` and `events/*/rsvps` readable and writable by anyone — matching the open, no-login design — but adds real **server-side field validation** on create/update: required fields, length caps, an allowed category list, a date-format check, and validation that `photoUrl` is either empty or a genuine download URL from this project's own Storage bucket, closing off using an event's photo field to hotlink arbitrary external content. `storage.rules` caps uploads at 8 MiB and restricts content types to `image/jpeg|png|gif|webp` — deliberately excluding `image/svg+xml`, since SVG can carry an embedded `<script>`; the app only ever renders `photoUrl` inside an `<img>` (which never executes it), but the raw Storage URL is a plain link, and a malicious SVG served from it would run script if someone opened that link directly. A CSP is set via `<meta>` (`script-src 'self' https://www.gstatic.com`, no `unsafe-inline`, which is why the script lives in `docs/app.js` rather than inline) to cap the blast radius of anything future found. Still, nothing stops someone with browser dev tools from calling the Firestore/Storage SDK directly with the public `firebaseConfig` (which is *meant* to be public — Firebase's security model is the rules, not a hidden key) and editing or deleting any event, or hammering `addDoc` to exhaust the project's document quota — the honeypot field and posting cooldown are page-JS only, enforced nowhere server-side, and both bypassable in seconds by anyone who skips the form.
+**Posting still needs no account, and the email isn't verified before the event goes live.** Anyone can post with any address, including someone else's. The only consequence is that the owner of that address receives the edit link. The server-side rate limits (see Spam deterrence above) cap how fast that can happen, but there's no CAPTCHA. Per-IP limits can be spread across many IPs by someone determined.
 
-In short: this setup is fine for a small trusted community sharing a link, but vulnerable to a motivated reader of its own public data, not just a sophisticated attacker. Real per-poster write protection and real rate limiting would both need actual authentication, which the site deliberately doesn't have.
+**The admin passphrase is still weaker than the edit links.** `ADMIN_HASH` is public in `docs/app.js`, so a weak passphrase can be guessed offline. `adminRemoveEvent` does re-check it server-side and rate-limits attempts, so dev tools alone no longer let someone delete events. The admin panel's passphrase check that unlocks the panel still happens in the browser. Keep the passphrase long and random, and rotate it if you suspect it's been guessed.
+
+**Photos and RSVPs are still open.** `storage.rules` lets anyone upload to `event-photos/`, capped at 8 MiB and limited to `image/jpeg|png|gif|webp`. SVG is deliberately excluded because it can carry an embedded `<script>`. `createEvent` only accepts a `photoUrl` from this project's own bucket. `events/*/rsvps` is openly writable, since RSVP counts are low-stakes. A CSP is set via `<meta>` (`script-src 'self' https://www.gstatic.com`, no `unsafe-inline`), which is why the script lives in `docs/app.js` rather than inline. The public `firebaseConfig` is *meant* to be public: Firebase's security model is the rules and functions, not a hidden key.
 
 **`subscribers` is the one collection that's deliberately *not* openly readable.** Unlike `events`, email addresses are real PII and were never meant to be public. `firestore.rules` allows `get` (fetch one document you already have the id for) but not `list` (enumerate/query the whole collection) — since the document id is an effectively-unguessable UUID chosen by the signing-up client, this is the same "secret link" pattern Firestore's own docs recommend, not security through obscurity on top of an otherwise-open collection. A subscriber's email is only ever readable by someone holding their own token (i.e. the subscriber themselves, via their unsubscribe link) or by the Cloud Functions' Admin SDK access, which bypasses rules entirely and runs only on Google's infrastructure under this project.
 
@@ -74,9 +81,11 @@ In short: this setup is fine for a small trusted community sharing a link, but v
 - **Cost:** Blaze doesn't change the free quota — it only lets usage exceed it (and bills for the excess) instead of hard-capping at it. At this site's realistic scale (a small community calendar), expected spend is $0/month; the free tier alone comfortably covers normal traffic by a wide margin. A **budget alert** is configured on the linked billing account (Google Cloud Console → Billing → Budgets & alerts → "Firebase Project the-monthly-table"): emails at $1, $1.80, and $2 of actual spend, sent to both billing admins and project owners. Firebase auto-created this budget at the same default thresholds during the Blaze upgrade — nothing needed to be added.
 - The `firebaseConfig` object in `docs/index.html` (apiKey, projectId, etc.) is not a secret — Firebase's access model relies on security rules, not on hiding that object. Don't add real secrets (service account keys, admin credentials) to this repo.
 
-## Email notifications setup
+## Cloud Functions setup (posting, edit links, and notifications)
 
-The signup form and `subscribers` collection work as soon as `firestore.rules` is deployed (see above) — people can sign up right now. Nothing actually gets *sent* until the two Cloud Functions in `functions/` are deployed, which needs a few one-time steps:
+**Posting an event now depends on the Cloud Functions**, and so do edit links and admin removal. Until the steps below are done and the functions are deployed, the "Add to the board" form will fail with "Couldn't post that". Deploy the functions and the updated `firestore.rules` **together, before or at the same time as** the site change reaches `master`. Deploy order matters: the new rules block the old page's direct writes, and the new page needs the functions.
+
+The notification signup form and `subscribers` collection work without the functions. One-time steps:
 
 1. **Own a domain.** Unlike some providers, Resend requires verifying a domain you own before it'll send to real recipients at all — there's no "verify a single email address" shortcut. If you don't have one yet, buy it yourself from any registrar (that's a purchase only you can make); Cloudflare Registrar and Namecheap are both reasonable, no-nonsense options.
 2. **Create a free Resend account** at [resend.com](https://resend.com) (or swap in another provider — the code isolates all of the sending logic in `sendToSubscribers()` in `functions/index.js`, so switching means rewriting that one function, not the two triggers that call it).
@@ -92,18 +101,29 @@ The signup form and `subscribers` collection work as soon as `firestore.rules` i
    npx firebase-tools functions:secrets:set RESEND_API_KEY
    ```
    (it'll prompt you to paste the key; input is hidden)
-8. **Deploy:**
+8. **Create the edit-link signing key**, which is also a secret. Generate a random value and paste it when prompted:
+   ```bash
+   openssl rand -base64 32
+   ```
+   ```bash
+   npx firebase-tools functions:secrets:set MANAGE_LINK_SECRET
+   ```
+   Changing this later invalidates every edit link already sent.
+9. **Deploy the functions and the rules:**
    ```bash
    cd functions && npm install && cd ..
-   npx firebase-tools deploy --only functions
+   npx firebase-tools deploy --only functions,firestore:rules
    ```
 
-After that, `onNewEvent` fires automatically the next time someone posts an event, and `dailyReminder` starts running once a day at 2pm Mountain Time. To confirm it's working without waiting for a real event, use the Firebase console's Cloud Functions logs (or `npx firebase-tools functions:log`), or manually add a test document to `events` via the Firestore console and watch for the email.
+To try the functions locally first, put fake values for both secrets in `functions/.secret.local` (gitignored) and run the emulators. They need Java: `brew install openjdk`.
+
+After that, posting works, hosts get their edit link by email, `onNewEvent` fires automatically the next time someone posts an event, and `dailyReminder` starts running once a day at 2pm Mountain Time. To confirm it's working without waiting for a real event, use the Firebase console's Cloud Functions logs (or `npx firebase-tools functions:log`), or manually add a test document to `events` via the Firestore console and watch for the email.
 
 ## Updating the live site
 
 - **Site:** edit `docs/index.html` (and `docs/app.js`) and push to `master` — Pages rebuilds automatically from `/docs`. Firestore data changes go through the Firebase console, the Firebase CLI, or a script using the Firebase client SDK (`npm install firebase`) — never hand-edit `firestore.rules`/`storage.rules` deployment without also pasting the update into the console's Rules tab (this repo's copy isn't auto-deployed).
 - **Cloud Functions:** edit `functions/index.js`, then `npx firebase-tools deploy --only functions` from the repo root. This repo's copy also isn't auto-deployed — same "paste it into the console, or run the deploy command" rule as the security rules files.
+- **Rules:** `firebase.json` now points at `firestore.rules` and `storage.rules`, so `npx firebase-tools deploy --only firestore:rules,storage` deploys them from the CLI (pasting into the console still works too).
 
 ## Design notes
 
