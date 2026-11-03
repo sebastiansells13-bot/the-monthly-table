@@ -193,7 +193,7 @@
   .notify-status{display:block; margin-top:8px;}
 
   /* ---------- partnership ---------- */
-  .partners{padding:44px 0; border-bottom:1px solid var(--line);}
+  .partners{padding:44px 0 52px; border-top:1px solid var(--line);}
   .partners .head{max-width:60ch; margin-bottom:24px;}
   .partners .head h2{font-size:26px;}
   .partners .head p{color:var(--ink-soft); margin-top:8px;}
@@ -211,7 +211,7 @@
   .partner-card p{color:var(--ink-soft); font-size:14.5px; margin-top:8px;}
 
   /* ---------- events board ---------- */
-  .board{padding:48px 0 20px;}
+  .board{padding:48px 0 44px; border-bottom:1px solid var(--line);}
   .board .head{
     display:flex; align-items:flex-end; justify-content:space-between; gap:16px; flex-wrap:wrap;
     margin-bottom:22px;
@@ -303,9 +303,12 @@
     grid-column:1/-1; text-align:center; padding:50px 20px; color:var(--ink-soft);
     border:1px dashed var(--line-strong); border-radius:var(--radius);
   }
+  .empty-state h3{font-size:20px; color:var(--ink); margin-bottom:6px;}
+  .empty-state p{margin:0 auto; max-width:44ch; font-size:14.5px;}
+  .empty-state .ctas{display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-top:18px;}
 
   /* ---------- form ---------- */
-  .host{padding:52px 0 60px;}
+  .host{padding:44px 0 52px;}
   .host-shell{
     background:var(--paper); border:1px solid var(--line); border-radius:var(--radius);
     box-shadow:var(--shadow); padding:32px clamp(20px,4vw,42px);
@@ -328,7 +331,7 @@
   .resend .form-status{display:block; margin-top:8px; font-size:13px;}
 
   form#event-form{display:flex; flex-direction:column; gap:14px;}
-  .field-row{display:grid; grid-template-columns:1fr 1fr; gap:14px;}
+  .field-row{display:grid; grid-template-columns:1fr 1fr; gap:14px; align-items:end;}
   .field{display:flex; flex-direction:column; gap:6px;}
   .field label{font-size:12px; font-weight:700; letter-spacing:0.04em; text-transform:uppercase; color:var(--ink-soft);}
   .field input, .field select, .field textarea{
@@ -340,6 +343,9 @@
   .field input::placeholder, .field textarea::placeholder{color:var(--ink-soft); opacity:0.7;}
   .field input[type="file"]{padding:7px 8px; font-size:13px;}
   .field-hint{font-size:12px; color:var(--ink-soft); font-weight:400; text-transform:none; letter-spacing:0;}
+  .form-row-hint{margin-top:-6px;}
+  .char-count{font-size:12px; color:var(--ink-soft); text-align:right; font-variant-numeric:tabular-nums;}
+  .char-count.near{color:var(--chile-ink); font-weight:600;}
   .form-actions{display:flex; align-items:center; gap:14px; margin-top:4px; flex-wrap:wrap;}
   .form-note{font-size:12.5px; color:var(--ink-soft);}
   .form-status{font-size:13.5px; font-weight:600;}
@@ -377,7 +383,7 @@
   @media (max-width:820px){
     .hero-grid{grid-template-columns:1fr;}
     .hero-art{max-width:340px; margin:0 auto;}
-    .notify-card{flex-direction:column; align-items:stretch;}
+    .notify-card{flex-direction:column; align-items:stretch; gap:18px;}
     .notify-form{width:100%;}
     .partner-cards{grid-template-columns:1fr;}
     .host-shell{grid-template-columns:1fr;}
@@ -391,6 +397,7 @@
     .nav-row .btn{padding:9px 13px; font-size:13px;}
     .hero{padding:40px 0 36px;}
     .stat-row{gap:10px 20px;}
+    .hero-art{max-width:240px;}
     .stat b{font-size:24px;}
     .stat span{font-size:11px;}
   }
@@ -458,6 +465,22 @@
     </div>
   </section>
 
+  <section class="board" id="board">
+    <div class="wrap">
+      <div class="head">
+        <div>
+          <h2>What's coming up</h2>
+          <p>Sorted by date, soonest first. RSVP or add one to your calendar. Posted one? The link in your confirmation email lets you edit it.</p>
+        </div>
+        <div class="chips" id="chips"></div>
+      </div>
+      <p class="manage-banner" id="manage-banner" role="status" hidden></p>
+      <div class="event-grid" id="event-grid" aria-live="polite" aria-busy="true">
+        <div class="empty-state">Loading the board…</div>
+      </div>
+    </div>
+  </section>
+
   <section class="notify" id="notify">
     <div class="wrap">
       <div class="notify-card" id="notify-signup">
@@ -485,43 +508,6 @@
           <h2>You won't get any more emails from this board.</h2>
           <p>Changed your mind? You can sign up again any time with the form on this page.</p>
         </div>
-      </div>
-    </div>
-  </section>
-
-  <section class="partners" id="about">
-    <div class="wrap">
-      <div class="head">
-        <h2>Why this board exists</h2>
-        <p>The Monthly Table is a neighbor-built calendar — it points toward the work of two organizations already active around Las Cruces, and gives anyone a way to add a grassroots event alongside them.</p>
-      </div>
-      <div class="partner-cards">
-        <div class="partner-card">
-          <span class="tag">In-home &amp; community care</span>
-          <h3>21st Century Care</h3>
-          <p>A Las Cruces provider of home- and community-based care for seniors and people with disabilities. The care days on this board are organized by neighbors in that same spirit — check-ins, wellness visits, and support for caregivers.</p>
-        </div>
-        <div class="partner-card">
-          <span class="tag">Hunger relief</span>
-          <h3>Roadrunner Food Bank</h3>
-          <p>New Mexico's largest hunger-relief organization, moving food to pantries and distributions across the state, including the Mesilla Valley. Food drives posted here help stock those shelves ahead of the next mobile pantry.</p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <section class="board" id="board">
-    <div class="wrap">
-      <div class="head">
-        <div>
-          <h2>What's coming up</h2>
-          <p>Sorted by date, soonest first. RSVP or add one to your calendar. Posted one? The link in your confirmation email lets you edit it.</p>
-        </div>
-        <div class="chips" id="chips"></div>
-      </div>
-      <p class="manage-banner" id="manage-banner" role="status" hidden></p>
-      <div class="event-grid" id="event-grid" aria-live="polite" aria-busy="true">
-        <div class="empty-state">Loading the board…</div>
       </div>
     </div>
   </section>
@@ -574,20 +560,21 @@
               <input id="f-date" name="date" type="date" required>
             </div>
             <div class="field">
-              <label for="f-time">Time</label>
-              <input id="f-time" name="time" type="text" placeholder="9:00–11:00 AM" required maxlength="40">
+              <label for="f-start">Starts <span class="field-hint">(optional)</span></label>
+              <input id="f-start" name="startTime" type="time">
             </div>
           </div>
           <div class="field-row">
             <div class="field">
-              <label for="f-start">Start time <span class="field-hint">(optional — powers the calendar links)</span></label>
-              <input id="f-start" name="startTime" type="time">
-            </div>
-            <div class="field">
-              <label for="f-end">End time <span class="field-hint">(optional)</span></label>
+              <label for="f-end">Ends <span class="field-hint">(optional)</span></label>
               <input id="f-end" name="endTime" type="time">
             </div>
+            <div class="field">
+              <label for="f-time">Time, as shown on the board</label>
+              <input id="f-time" name="time" type="text" placeholder="9:00–11:00 AM or “All day drop-off”" required maxlength="40" aria-describedby="f-time-hint">
+            </div>
           </div>
+          <span class="field-hint form-row-hint" id="f-time-hint">Fills in from the start and end times — edit it if you'd like different wording. Start and end times also make the “add to calendar” links exact.</span>
           <div class="field">
             <label for="f-location">Location</label>
             <input id="f-location" name="location" type="text" placeholder="Address or landmark, Las Cruces" required maxlength="100">
@@ -604,7 +591,8 @@
           </div>
           <div class="field">
             <label for="f-desc">What should people know?</label>
-            <textarea id="f-desc" name="description" placeholder="What to bring, what to expect, who it's for…" required maxlength="400"></textarea>
+            <textarea id="f-desc" name="description" placeholder="What to bring, what to expect, who it's for…" required maxlength="400" aria-describedby="f-desc-count"></textarea>
+            <span class="char-count" id="f-desc-count" aria-live="polite">0 / 400</span>
           </div>
           <div class="field-row">
             <div class="field">
@@ -612,8 +600,8 @@
               <input id="f-vol" name="volunteersNeeded" type="number" min="0" max="200" placeholder="0">
             </div>
             <div class="field">
-              <label for="f-photo">Photo or flyer <span class="field-hint">(optional)</span></label>
-              <input id="f-photo" name="photo" type="file" accept="image/*">
+              <label for="f-photo">Photo or flyer <span class="field-hint">(optional — JPG, PNG, GIF, or WebP, up to 8 MB)</span></label>
+              <input id="f-photo" name="photo" type="file" accept="image/jpeg,image/png,image/gif,image/webp">
             </div>
           </div>
           <div class="field">
@@ -631,6 +619,27 @@
           </div>
           <p class="form-note">Posted events are visible to everyone who opens this page — please don't include anything private.</p>
         </form>
+      </div>
+    </div>
+  </section>
+
+  <section class="partners" id="about">
+    <div class="wrap">
+      <div class="head">
+        <h2>Why this board exists</h2>
+        <p>The Monthly Table is a neighbor-built calendar — it points toward the work of two organizations already active around Las Cruces, and gives anyone a way to add a grassroots event alongside them.</p>
+      </div>
+      <div class="partner-cards">
+        <div class="partner-card">
+          <span class="tag">In-home &amp; community care</span>
+          <h3>21st Century Care</h3>
+          <p>A Las Cruces provider of home- and community-based care for seniors and people with disabilities. The care days on this board are organized by neighbors in that same spirit — check-ins, wellness visits, and support for caregivers.</p>
+        </div>
+        <div class="partner-card">
+          <span class="tag">Hunger relief</span>
+          <h3>Roadrunner Food Bank</h3>
+          <p>New Mexico's largest hunger-relief organization, moving food to pantries and distributions across the state, including the Mesilla Valley. Food drives posted here help stock those shelves ahead of the next mobile pantry.</p>
+        </div>
       </div>
     </div>
   </section>
