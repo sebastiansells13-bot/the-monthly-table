@@ -33,6 +33,9 @@ const CAT_LIST = Object.keys(CATS);
 const MONTHS = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
 const ADMIN_HASH = '5f4f6fab154b4e5fe5789d4fd8aebdf94c1f75926e0c7b4335bd05e7f72e2b35';
 const SUBMIT_COOLDOWN_MS = 45000;
+// Must match storage.rules.
+const PHOTO_TYPES = ['image/jpeg','image/png','image/gif','image/webp'];
+const PHOTO_MAX_BYTES = 8 * 1024 * 1024;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function pad(n){ return String(n).padStart(2,'0'); }
@@ -171,9 +174,12 @@ function callFn(name, data){
 }
 // Errors the Cloud Functions throw on purpose carry a message meant for the
 // visitor; anything else (network, crash) gets the caller's fallback.
+// (A function that isn't deployed also reports not-found, but with a bare
+// status like "NOT_FOUND" as the message -- that's not for visitors.)
 function friendlyError(err, fallback){
   const code = err && err.code ? String(err.code).replace(/^functions\//, '') : '';
-  if (['invalid-argument','permission-denied','not-found','resource-exhausted'].includes(code) && err.message) return err.message;
+  const msg = err && err.message ? String(err.message) : '';
+  if (['invalid-argument','permission-denied','not-found','resource-exhausted'].includes(code) && msg && !/^[A-Z_]+$/.test(msg)) return msg;
   return fallback;
 }
 
@@ -303,8 +309,18 @@ function renderEvents(){
   const inputs = snapshotInputs(grid);
   if (!boardLoaded){
     // keep the "Loading…" / error placeholder until the first snapshot lands
+  } else if (upcomingAll.length === 0){
+    grid.innerHTML = `
+      <div class="empty-state">
+        <h3>Nothing on the board right now.</h3>
+        <p>Have something in mind — a pantry, a meal, a care day? Post it and neighbors will see it here.</p>
+        <div class="ctas">
+          <a class="btn" href="#host">Host an event</a>
+          <a class="btn ghost" href="#notify">Email me when one's posted</a>
+        </div>
+      </div>`;
   } else if (upcoming.length === 0){
-    grid.innerHTML = `<div class="empty-state">Nothing posted ${activeFilter === 'All' ? 'yet' : 'in “' + escapeHtml(activeFilter) + '” yet'} — be the first to <a href="#host">add one</a>.</div>`;
+    grid.innerHTML = `<div class="empty-state"><p>Nothing in “${escapeHtml(activeFilter)}” right now. <button type="button" class="manage-btn" data-action="show-all">Show all events</button></p></div>`;
   } else {
     // A malformed document (bad data another client wrote, or a legacy
     // record missing a field this version expects) shouldn't take the
@@ -326,6 +342,12 @@ function renderEvents(){
         if (first) first.focus({ preventScroll: true });
       }
     }
+  }
+
+  // Filters and "0 / 0 / —" stats only add noise on an empty board.
+  if (boardLoaded){
+    chipsEl.hidden = upcomingAll.length === 0;
+    document.getElementById('stat-row').hidden = upcomingAll.length === 0;
   }
 
   // stats
@@ -372,6 +394,7 @@ document.getElementById('event-grid').addEventListener('click', async (ev) => {
   const btn = ev.target.closest('[data-action]');
   if (!btn) return;
   const { action, id } = btn.dataset;
+  if (action === 'show-all'){ activeFilter = 'All'; renderChips(); return renderEvents(); }
   if (action === 'rsvp') return handleRsvp(id);
   if (action === 'ics') return handleIcs(id);
   if (action === 'manage-toggle') return handleManageToggle(id);
@@ -523,6 +546,37 @@ const form = document.getElementById('event-form');
 const statusEl = document.getElementById('form-status');
 // Past-dated events never show on the board, so don't let hosts pick one.
 document.getElementById('f-date').min = todayISO();
+
+// "14:00" -> { text: "2:00", ampm: "PM" }
+function to12h(hhmm){
+  const [h, m] = hhmm.split(':').map(Number);
+  return { text: `${h % 12 || 12}:${pad(m)}`, ampm: h < 12 ? 'AM' : 'PM' };
+}
+function timeRangeText(start, end){
+  if (!start) return '';
+  const s = to12h(start);
+  if (!end) return `${s.text} ${s.ampm}`;
+  const e = to12h(end);
+  return s.ampm === e.ampm ? `${s.text}–${e.text} ${e.ampm}` : `${s.text} ${s.ampm}–${e.text} ${e.ampm}`;
+}
+// Fill the board's display time from the start/end pickers, until the host
+// types their own wording.
+const timeInput = document.getElementById('f-time');
+let timeEdited = false;
+timeInput.addEventListener('input', () => { timeEdited = timeInput.value.trim() !== ''; });
+['f-start','f-end'].forEach(id => document.getElementById(id).addEventListener('change', () => {
+  if (timeEdited) return;
+  timeInput.value = timeRangeText(document.getElementById('f-start').value, document.getElementById('f-end').value);
+}));
+
+const descInput = document.getElementById('f-desc');
+const descCount = document.getElementById('f-desc-count');
+function updateDescCount(){
+  const n = descInput.value.length;
+  descCount.textContent = `${n} / 400`;
+  descCount.classList.toggle('near', n >= 360);
+}
+descInput.addEventListener('input', updateDescCount);
 form.addEventListener('submit', async (ev) => {
   ev.preventDefault();
   if (!firestore){
@@ -588,30 +642,50 @@ form.addEventListener('submit', async (ev) => {
     return;
   }
 
+  const photoFile = fd.get('photo');
+  if (photoFile && photoFile.size > 0){
+    if (!PHOTO_TYPES.includes(photoFile.type)){
+      statusEl.textContent = 'Photos need to be JPG, PNG, GIF, or WebP.';
+      statusEl.className = 'form-status err';
+      return;
+    }
+    if (photoFile.size > PHOTO_MAX_BYTES){
+      statusEl.textContent = 'That photo is over 8 MB — try a smaller one.';
+      statusEl.className = 'form-status err';
+      return;
+    }
+  }
+
   const submitBtn = document.getElementById('submit-btn');
   submitBtn.disabled = true;
   statusEl.textContent = 'Posting…';
   statusEl.className = 'form-status';
   try{
     const photo = fd.get('photo');
+    let photoFailed = false;
     if (photo && photo.size > 0 && storageService){
+      photoFailed = true;
       try{
         const path = 'event-photos/' + Date.now() + '-' + slugify(data.title) + '-' + photo.name.replace(/[^a-zA-Z0-9.]+/g,'-');
         const fileRef = storageRef(storageService, path);
         await uploadBytes(fileRef, photo);
         data.photoUrl = await getDownloadURL(fileRef);
         data.photoAssetId = path;
+        photoFailed = false;
       } catch(err){ console.error('photo upload failed', err); }
     }
 
     const result = await callFn('createEvent', { event: data, email, website: '' });
     form.reset();
     try{ localStorage.setItem('mt_last_submit', String(Date.now())); } catch(e){}
+    updateDescCount();
+    timeEdited = false;
+    const photoNote = photoFailed ? ' (The photo didn’t upload, so it was posted without one.)' : '';
     if (result && result.emailSent === false){
-      statusEl.textContent = 'Posted — but we couldn’t send your edit link. Use “Lost your edit link?” to try again.';
+      statusEl.textContent = 'Posted — but we couldn’t send your edit link. Use “Lost your edit link?” to try again.' + photoNote;
       statusEl.className = 'form-status err';
     } else {
-      statusEl.textContent = `Posted! Check ${email} for a link to edit or cancel it.`;
+      statusEl.textContent = `Posted! Check ${email} for a link to edit or cancel it.` + photoNote;
       statusEl.className = 'form-status ok';
     }
   } catch(e){
